@@ -171,9 +171,17 @@ node scripts/linear.mjs mark-done --issue EKA-123
 
 The write commands require explicit issue or team arguments. The helper prints JSON results and exits with a non-zero status if Linear returns an error.
 
-## Release Checklist
+## v1 Release Checklist
 
-- Run a manual browser pass on the primary prompt workflows
-- Verify JSON export can be imported back without data loss
-- Test common mobile, tablet, laptop, and desktop viewport sizes
-- Confirm repository metadata is present before publishing to GitHub
+- Core prompt workflows tested: create, edit, save, reload, search, favorite, archive, copy, duplicate, and delete
+- JSON import/export hardened and tested with malformed, partial, oversized, duplicate-ID, merge, and replace scenarios
+- Responsive layout tested at 390px, 720px, 900px, 1040px, and 1440px
+- README covers setup, workflows, backup guidance, limitations, and troubleshooting
+- GitHub repository is connected and `main` contains the v1-ready code
+
+Known v1 risks:
+
+- Data is browser-local and can be lost if browser storage is cleared without an export
+- Import limits are fixed at 2 MB and 1,000 prompts
+- Validation summarizes cleanup instead of showing per-field import warnings
+- Mobile Safari and other non-Chromium browsers should still get a quick smoke test before broad distribution
