@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Prompt Shelf</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="background-grid" aria-hidden="true"></div>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <div class="brand-mark" aria-hidden="true">⌘</div>
+          <div>
+            <p class="eyebrow">Prompt Library</p>
+            <h1>Prompt Shelf</h1>
+          </div>
+          <p class="brand-copy">
+            Save your best prompts, revisit older ones, and keep the useful
+            work close.
+          </p>
+        </div>
+
+        <button id="newPromptButton" class="primary-button sidebar-button" type="button">
+          New Prompt
+        </button>
+
+        <section class="sidebar-section">
+          <p class="section-label">Views</p>
+          <div id="viewNav" class="nav-stack">
+            <button class="nav-button is-active" data-view="all" type="button">
+              <span>Library</span>
+              <span id="countAll" class="count-pill">0</span>
+            </button>
+            <button class="nav-button" data-view="favorites" type="button">
+              <span>Favorites</span>
+              <span id="countFavorites" class="count-pill">0</span>
+            </button>
+            <button class="nav-button" data-view="recent" type="button">
+              <span>Recently Used</span>
+              <span id="countRecent" class="count-pill">0</span>
+            </button>
+            <button class="nav-button" data-view="archive" type="button">
+              <span>Archive</span>
+              <span id="countArchive" class="count-pill">0</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="sidebar-section">
+          <div class="section-heading">
+            <p class="section-label">Collections</p>
+            <span id="collectionCount" class="mini-label">0 groups</span>
+          </div>
+          <div id="collectionList" class="collection-list"></div>
+        </section>
+
+        <section class="sidebar-section">
+          <div class="section-heading">
+            <p class="section-label">Tags</p>
+            <span id="tagCount" class="mini-label">0 tags</span>
+          </div>
+          <div id="tagList" class="tag-filter-list"></div>
+        </section>
+
+        <div class="sidebar-footer">
+          <div class="utility-actions">
+            <button id="importButton" class="ghost-button utility-button" type="button">
+              Import JSON
+            </button>
+            <button id="exportButton" class="ghost-button utility-button" type="button">
+              Export JSON
+            </button>
+          </div>
+          <div class="shortcut-panel" aria-label="Keyboard shortcuts">
+            <p class="section-label">Shortcuts</p>
+            <div class="shortcut-grid">
+              <span><kbd>/</kbd> Search</span>
+              <span><kbd>N</kbd> New</span>
+              <span><kbd>F</kbd> Favorite</span>
+              <span><kbd>C</kbd> Copy</span>
+              <span><kbd>Esc</kbd> Clear</span>
+            </div>
+          </div>
+          <p id="storageStatus" class="footer-note">Saved locally in your browser.</p>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <section class="library-pane">
+          <header class="pane-header">
+            <div>
+              <p class="eyebrow">Library</p>
+              <h2 id="libraryTitle">Active prompts</h2>
+              <p class="pane-subtitle">Search, sort, and reuse your saved prompt patterns.</p>
+            </div>
+            <div class="header-actions">
+              <button id="duplicatePromptTop" class="ghost-button" type="button">
+                Duplicate
+              </button>
+              <button id="copyPromptTop" class="ghost-button" type="button">
+                Copy Prompt
+              </button>
+            </div>
+          </header>
+
+          <section class="toolbar">
+            <label class="search-field">
+              <span class="visually-hidden">Search prompts</span>
+              <input
+                id="searchInput"
+                type="search"
+                placeholder="Search title, content, tags, or collection"
+                autocomplete="off"
+              />
+            </label>
+
+            <div id="filterChips" class="filter-chips" aria-label="Prompt filters">
+              <button class="chip is-active" data-sort="updated" type="button">
+                Updated
+              </button>
+              <button class="chip" data-sort="created" type="button">Created</button>
+              <button class="chip" data-sort="alphabetical" type="button">
+                A to Z
+              </button>
+              <button class="chip" data-sort="used" type="button">Last Used</button>
+            </div>
+          </section>
+
+          <div class="list-meta">
+            <p id="resultSummary">0 prompts</p>
+            <button id="clearFiltersButton" class="text-button" type="button">
+              Clear filters
+            </button>
+          </div>
+
+          <div id="libraryList" class="prompt-list" aria-live="polite"></div>
+        </section>
+
+        <section class="detail-pane">
+          <header class="detail-header">
+            <div>
+              <p class="eyebrow">Details</p>
+              <h2 id="detailTitle">Select a prompt</h2>
+              <p class="pane-subtitle">Edit metadata, prompt text, and usage notes.</p>
+            </div>
+            <div class="header-actions detail-actions">
+              <button id="favoriteToggle" class="ghost-button" type="button">
+                Favorite
+              </button>
+              <button id="archiveToggle" class="ghost-button" type="button">
+                Archive
+              </button>
+            </div>
+          </header>
+
+          <div class="detail-scroll">
+            <section class="summary-strip">
+              <article class="summary-card">
+                <p class="summary-label">Collection</p>
+                <strong id="summaryFolder">-</strong>
+              </article>
+              <article class="summary-card">
+                <p class="summary-label">Updated</p>
+                <strong id="summaryUpdated">-</strong>
+              </article>
+              <article class="summary-card">
+                <p class="summary-label">Last used</p>
+                <strong id="summaryUsed">-</strong>
+              </article>
+            </section>
+
+            <form id="promptForm" class="editor-form" autocomplete="off">
+              <label class="field-group">
+                <span class="field-label">Title</span>
+                <input id="titleInput" name="title" type="text" placeholder="Prompt title" />
+              </label>
+
+              <div class="field-grid">
+                <label class="field-group">
+                  <span class="field-label">Collection</span>
+                  <input
+                    id="folderInput"
+                    name="folder"
+                    type="text"
+                    list="folderOptions"
+                    placeholder="Writing, Research, Support"
+                  />
+                </label>
+
+                <label class="field-group">
+                  <span class="field-label">Tags</span>
+                  <input
+                    id="tagsInput"
+                    name="tags"
+                    type="text"
+                    placeholder="comma, separated, tags"
+                  />
+                </label>
+              </div>
+
+              <label class="field-group">
+                <span class="field-label">Prompt</span>
+                <textarea
+                  id="contentInput"
+                  name="content"
+                  rows="11"
+                  placeholder="Write the full reusable prompt here"
+                ></textarea>
+              </label>
+
+              <label class="field-group">
+                <span class="field-label">Usage notes</span>
+                <textarea
+                  id="notesInput"
+                  name="notes"
+                  rows="5"
+                  placeholder="Context, best model, input rules, or handoff notes"
+                ></textarea>
+              </label>
+            </form>
+
+            <section class="preview-panel">
+              <div class="preview-header">
+                <p class="section-label">Preview</p>
+                <span id="previewMeta" class="mini-label">Ready</span>
+              </div>
+              <pre id="promptPreview" class="prompt-preview"></pre>
+            </section>
+          </div>
+
+          <footer class="detail-footer">
+            <div class="footer-actions">
+              <button id="copyPromptButton" class="primary-button" type="button">
+                Copy Prompt
+              </button>
+              <button id="duplicatePromptButton" class="ghost-button" type="button">
+                Duplicate
+              </button>
+              <button id="deletePromptButton" class="ghost-button danger" type="button">
+                Delete
+              </button>
+            </div>
+            <p id="saveStatus" class="footer-note">Saved locally.</p>
+          </footer>
+        </section>
+      </main>
+    </div>
+
+    <datalist id="folderOptions"></datalist>
+    <input id="importFileInput" class="visually-hidden" type="file" accept="application/json,.json" />
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
