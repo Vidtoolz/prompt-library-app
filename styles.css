@@ -907,7 +907,7 @@ textarea {
   }
 
   .prompt-list {
-    max-height: none;
+    max-height: min(520px, 58vh);
     padding: 14px 12px 22px;
   }
 
@@ -921,14 +921,21 @@ textarea {
     flex-direction: column;
   }
 
+  .toast {
+    right: 12px;
+    bottom: 12px;
+  }
+}
+
+@media (max-width: 480px) {
   .utility-actions,
   .shortcut-grid {
     grid-template-columns: 1fr;
   }
 
-  .toast {
-    right: 12px;
-    bottom: 12px;
+  .header-actions > button,
+  .footer-actions > button {
+    flex: 1 1 150px;
   }
 }
 
