@@ -1,6 +1,13 @@
 const STORAGE_KEY = "prompt-shelf-state-v1";
 const EXPORT_VERSION = 1;
 const RECENT_WINDOW_DAYS = 21;
+const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
+const MAX_IMPORT_PROMPTS = 1000;
+const MAX_TEXT_LENGTH = 20000;
+const MAX_TITLE_LENGTH = 160;
+const MAX_FOLDER_LENGTH = 80;
+const MAX_TAG_LENGTH = 40;
+const MAX_TAGS = 12;
 
 const seedPrompts = [
   {
@@ -459,15 +466,22 @@ async function importLibrary(event) {
     return;
   }
 
-  try {
-    const parsed = JSON.parse(await file.text());
-    const imported = normalizeImportedPrompts(parsed);
+  if (file.size > MAX_IMPORT_BYTES) {
+    showToast("Import failed: JSON file is larger than 2 MB.");
+    return;
+  }
 
-    if (!imported.length) {
-      showToast("Import failed: no valid prompts found.");
+  try {
+    const importedText = await file.text();
+    const parsed = JSON.parse(importedText);
+    const result = normalizeImportedPrompts(parsed);
+
+    if (!result.ok) {
+      showToast(result.message);
       return;
     }
 
+    const { prompts: imported, skipped, sanitized } = result;
     const mode = window.prompt(
       `Import ${imported.length} prompt${imported.length === 1 ? "" : "s"}.\n\nType IMPORT to add them as copies.\nType REPLACE to overwrite the current local library.`
     );
@@ -478,6 +492,7 @@ async function importLibrary(event) {
       return;
     }
 
+    const now = new Date().toISOString();
     if (normalizedMode === "REPLACE") {
       state.prompts = ensureUniquePromptIds(imported);
     } else {
@@ -486,8 +501,8 @@ async function importLibrary(event) {
           ...prompt,
           id: buildId(),
           title: `${displayTitle(prompt)} Import`,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          createdAt: now,
+          updatedAt: now,
         })),
         ...state.prompts,
       ];
@@ -503,8 +518,8 @@ async function importLibrary(event) {
     flashSaveState(
       saved
         ? normalizedMode === "REPLACE"
-          ? `Replaced library with ${imported.length} prompts.`
-          : `Added ${imported.length} imported prompts.`
+          ? buildImportSummary("Replaced library with", imported.length, skipped, sanitized)
+          : buildImportSummary("Added", imported.length, skipped, sanitized)
         : "Import loaded, but not saved locally."
     );
   } catch (error) {
@@ -1135,35 +1150,224 @@ function normalizeImportedPrompts(parsed) {
   const candidates = Array.isArray(parsed) ? parsed : parsed?.prompts;
 
   if (!Array.isArray(candidates)) {
-    return [];
+    return {
+      ok: false,
+      message: "Import failed: expected a prompts array.",
+    };
   }
 
-  return candidates
-    .filter((prompt) => prompt && typeof prompt === "object")
-    .map(normalizePrompt)
-    .filter((prompt) => prompt.title || prompt.content || prompt.notes);
+  if (!candidates.length) {
+    return {
+      ok: false,
+      message: "Import failed: the prompts array is empty.",
+    };
+  }
+
+  if (candidates.length > MAX_IMPORT_PROMPTS) {
+    return {
+      ok: false,
+      message: `Import failed: limit is ${MAX_IMPORT_PROMPTS} prompts per file.`,
+    };
+  }
+
+  const normalized = [];
+  let skipped = 0;
+  let sanitized = 0;
+
+  candidates.forEach((candidate) => {
+    const result = normalizeImportedPrompt(candidate);
+    if (!result.prompt) {
+      skipped += 1;
+      return;
+    }
+
+    if (result.sanitized) {
+      sanitized += 1;
+    }
+    normalized.push(result.prompt);
+  });
+
+  if (!normalized.length) {
+    return {
+      ok: false,
+      message: "Import failed: no valid prompts found.",
+    };
+  }
+
+  const duplicateIds = countDuplicateIds(normalized);
+
+  return {
+    ok: true,
+    prompts: ensureUniquePromptIds(normalized),
+    skipped,
+    sanitized: sanitized + duplicateIds,
+  };
 }
 
 function normalizePrompt(prompt) {
+  return normalizeImportedPrompt(prompt).prompt || createEmptyPromptSnapshot();
+}
+
+function normalizeImportedPrompt(prompt) {
+  if (!prompt || typeof prompt !== "object" || Array.isArray(prompt)) {
+    return { prompt: null, sanitized: false };
+  }
+
   const now = new Date().toISOString();
-  const useCount = Number(prompt.useCount);
+  const title = normalizeTextField(prompt.title, MAX_TITLE_LENGTH);
+  const folder = normalizeTextField(prompt.folder, MAX_FOLDER_LENGTH) || "Workspace";
+  const content = normalizeTextField(prompt.content, MAX_TEXT_LENGTH);
+  const notes = normalizeTextField(prompt.notes, MAX_TEXT_LENGTH);
+  const tags = normalizeTags(prompt.tags);
+  const useCount = normalizeUseCount(prompt.useCount);
+  const createdAt = isValidDate(prompt.createdAt) ? prompt.createdAt : now;
+  const updatedAt = isValidDate(prompt.updatedAt) ? prompt.updatedAt : now;
+  const lastUsedAt = isValidDate(prompt.lastUsedAt) ? prompt.lastUsedAt : null;
+
+  const normalized = {
+    id: normalizeId(prompt.id),
+    title,
+    folder,
+    tags,
+    favorite: prompt.favorite === true,
+    archived: prompt.archived === true,
+    useCount,
+    content,
+    notes,
+    createdAt,
+    updatedAt,
+    lastUsedAt,
+  };
+
+  if (!normalized.title && !normalized.content && !normalized.notes) {
+    return { prompt: null, sanitized: false };
+  }
 
   return {
-    id: typeof prompt.id === "string" && prompt.id ? prompt.id : buildId(),
-    title: typeof prompt.title === "string" ? prompt.title : "",
-    folder: typeof prompt.folder === "string" ? prompt.folder : "Workspace",
-    tags: Array.isArray(prompt.tags)
-      ? prompt.tags.filter((tag) => typeof tag === "string").map((tag) => tag.trim()).filter(Boolean)
-      : [],
-    favorite: Boolean(prompt.favorite),
-    archived: Boolean(prompt.archived),
-    useCount: Number.isFinite(useCount) && useCount > 0 ? useCount : 0,
-    content: typeof prompt.content === "string" ? prompt.content : "",
-    notes: typeof prompt.notes === "string" ? prompt.notes : "",
-    createdAt: isValidDate(prompt.createdAt) ? prompt.createdAt : now,
-    updatedAt: isValidDate(prompt.updatedAt) ? prompt.updatedAt : now,
-    lastUsedAt: isValidDate(prompt.lastUsedAt) ? prompt.lastUsedAt : null,
+    prompt: normalized,
+    sanitized: didSanitizePrompt(prompt, normalized),
   };
+}
+
+function createEmptyPromptSnapshot() {
+  const now = new Date().toISOString();
+  return {
+    id: buildId(),
+    title: "",
+    folder: "Workspace",
+    tags: [],
+    favorite: false,
+    archived: false,
+    useCount: 0,
+    content: "",
+    notes: "",
+    createdAt: now,
+    updatedAt: now,
+    lastUsedAt: null,
+  };
+}
+
+function normalizeId(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : buildId();
+}
+
+function normalizeTextField(value, maxLength) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim().slice(0, maxLength);
+}
+
+function normalizeTags(value) {
+  const rawTags = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(",")
+      : [];
+  const seen = new Set();
+  const tags = [];
+
+  rawTags.forEach((tag) => {
+    if (typeof tag !== "string") {
+      return;
+    }
+
+    const normalized = tag.trim().slice(0, MAX_TAG_LENGTH);
+    const key = normalized.toLowerCase();
+    if (!normalized || seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    tags.push(normalized);
+  });
+
+  return tags.slice(0, MAX_TAGS);
+}
+
+function normalizeUseCount(value) {
+  const useCount = Number(value);
+  if (!Number.isFinite(useCount) || useCount <= 0) {
+    return 0;
+  }
+
+  return Math.min(Math.floor(useCount), 999999);
+}
+
+function didSanitizePrompt(original, normalized) {
+  const originalId = typeof original.id === "string" ? original.id.trim() : "";
+  const originalFolder = normalizeTextField(original.folder, MAX_FOLDER_LENGTH) || "Workspace";
+  const originalTags = Array.isArray(original.tags)
+    ? original.tags.filter((tag) => typeof tag === "string").map((tag) => tag.trim()).filter(Boolean)
+    : typeof original.tags === "string"
+      ? original.tags.split(",").map((tag) => tag.trim()).filter(Boolean)
+      : [];
+
+  return (
+    originalId !== normalized.id ||
+    normalizeTextField(original.title, MAX_TITLE_LENGTH) !== normalized.title ||
+    originalFolder !== normalized.folder ||
+    normalizeTextField(original.content, MAX_TEXT_LENGTH) !== normalized.content ||
+    normalizeTextField(original.notes, MAX_TEXT_LENGTH) !== normalized.notes ||
+    normalizeUseCount(original.useCount) !== normalized.useCount ||
+    original.favorite !== normalized.favorite ||
+    original.archived !== normalized.archived ||
+    !isValidDate(original.createdAt) ||
+    !isValidDate(original.updatedAt) ||
+    (original.lastUsedAt !== null && original.lastUsedAt !== undefined && !isValidDate(original.lastUsedAt)) ||
+    originalTags.join("\u0000") !== normalized.tags.join("\u0000")
+  );
+}
+
+function buildImportSummary(action, importedCount, skippedCount, sanitizedCount) {
+  const parts = [`${action} ${importedCount} prompt${importedCount === 1 ? "" : "s"}.`];
+
+  if (skippedCount) {
+    parts.push(`${skippedCount} invalid prompt${skippedCount === 1 ? "" : "s"} skipped.`);
+  }
+
+  if (sanitizedCount) {
+    parts.push(`${sanitizedCount} prompt${sanitizedCount === 1 ? "" : "s"} cleaned up.`);
+  }
+
+  return parts.join(" ");
+}
+
+function countDuplicateIds(prompts) {
+  const seenIds = new Set();
+  let duplicates = 0;
+
+  prompts.forEach((prompt) => {
+    if (seenIds.has(prompt.id)) {
+      duplicates += 1;
+      return;
+    }
+
+    seenIds.add(prompt.id);
+  });
+
+  return duplicates;
 }
 
 function ensureUniquePromptIds(prompts) {

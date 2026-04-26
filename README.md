@@ -83,6 +83,8 @@ Import expects either an exported Prompt Shelf JSON object with a `prompts` arra
 
 Because storage is browser-local, each browser profile or device has its own separate library.
 
+Import limits are intentionally modest: JSON files must be 2 MB or smaller and contain no more than 1,000 prompts. During import, Prompt Shelf repairs duplicate IDs, normalizes dates, trims long text fields, cleans tags, and skips entries that do not contain a title, prompt body, or notes.
+
 ## Backup Guidance
 
 - Export before clearing browser data, switching devices, or testing imports.
