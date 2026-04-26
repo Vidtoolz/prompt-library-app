@@ -86,6 +86,64 @@ Because storage is browser-local, each browser profile or device has its own lib
 - `index.html` defines the static app structure
 - `styles.css` contains the full responsive UI styling
 - `app.js` contains state management, rendering, local storage, import/export, and keyboard shortcuts
+- `scripts/linear.mjs` provides a small Linear GraphQL helper for Hermes workflows
+
+## Linear Helper
+
+The repository includes a dependency-free Node helper for common Linear operations. It uses the Linear GraphQL API and reads `LINEAR_API_KEY` from either the current environment or:
+
+```text
+~/.config/hermes/secrets/linear.env
+```
+
+Example secrets file:
+
+```sh
+LINEAR_API_KEY=lin_api_your_key_here
+```
+
+Do not commit API keys or local secret files.
+
+### Commands
+
+List teams:
+
+```sh
+node scripts/linear.mjs list-teams
+```
+
+List projects:
+
+```sh
+node scripts/linear.mjs list-projects
+```
+
+List open issues:
+
+```sh
+node scripts/linear.mjs list-open-issues
+node scripts/linear.mjs list-open-issues --team EKA
+```
+
+Create an issue:
+
+```sh
+node scripts/linear.mjs create-issue --team EKA --title "Manual browser testing pass" --description "Run the v1 browser test checklist." --project "Prompt Library App" --state Backlog
+```
+
+Add a comment:
+
+```sh
+node scripts/linear.mjs add-comment --issue EKA-123 --body "Tested locally and found no blockers."
+```
+
+Mark an issue done:
+
+```sh
+node scripts/linear.mjs mark-done --issue EKA-123
+```
+
+The write commands require explicit issue or team arguments. The helper prints JSON results and exits with a non-zero status if Linear returns an error.
 
 ## Release Checklist
 
