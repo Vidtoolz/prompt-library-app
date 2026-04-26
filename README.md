@@ -27,6 +27,41 @@ Then open:
 http://localhost:8000
 ```
 
+No package install or build command is required.
+
+## Main Workflows
+
+### Create and Edit Prompts
+
+Use **New Prompt** to add a prompt to the library. Select a prompt from the list to edit its title, collection, tags, prompt body, and usage notes. Changes are saved automatically to local browser storage.
+
+### Organize the Library
+
+The sidebar provides quick views for:
+
+- **Library**: active, non-archived prompts
+- **Favorites**: active prompts marked as favorites
+- **Recently Used**: active prompts copied or used recently
+- **Archive**: prompts removed from the active library without permanent deletion
+
+Collections and tags are generated from the prompt metadata. Selecting a collection or tag filters the visible prompt list.
+
+### Search and Sort
+
+Use the search field to find prompts by title, prompt content, tags, notes, or collection. Sort chips reorder the visible list by updated date, created date, title, or last used date. **Clear filters** resets the current view, search, collection, tag, and sort state.
+
+### Reuse, Duplicate, Archive, and Delete
+
+Use **Copy Prompt** to copy the selected prompt body to the clipboard and update its recent usage metadata. Use **Duplicate** to create an editable copy. Use **Favorite** to pin useful prompts to the Favorites view. Use **Archive** to hide a prompt from the active library, or **Delete** to permanently remove it from local storage after confirmation.
+
+### Keyboard Shortcuts
+
+- `/`: focus search
+- `N`: create a new prompt
+- `F`: toggle favorite on the selected prompt
+- `C`: copy the selected prompt
+- `Esc`: clear search or filters
+
 ## Data Storage
 
 Prompt data is saved under the browser storage key `prompt-shelf-state-v1`.
@@ -41,6 +76,10 @@ Imports validate the selected JSON file, then prompt for one of two modes:
 
 - `IMPORT` adds the imported prompts as copies
 - `REPLACE` overwrites the current local library
+
+Import expects either an exported Prompt Shelf JSON object with a `prompts` array or a raw array of prompt objects. Invalid files, empty prompt sets, and unsupported shapes are rejected without changing local data.
+
+Because storage is browser-local, each browser profile or device has its own library. Use export and import to move prompts between browsers or keep a manual backup.
 
 ## Project Files
 
