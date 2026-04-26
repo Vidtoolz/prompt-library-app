@@ -1,8 +1,8 @@
 # Prompt Library App
 
-Prompt Library App is a local-first browser app for saving, organizing, searching, importing, and exporting reusable prompts. The in-app name is Prompt Shelf.
+Prompt Library App is a local-first browser app for saving, organizing, searching, importing, and exporting reusable prompts. The app itself is named **Prompt Shelf**.
 
-The app runs as a static site with no build step. Prompt data is stored in the browser with `localStorage`, and JSON import/export is available from the sidebar.
+It runs as a static site with no build step. Prompt data stays in your browser through `localStorage`; use JSON export/import for backups or moving data between browsers.
 
 ## Features
 
@@ -15,7 +15,9 @@ The app runs as a static site with no build step. Prompt data is stored in the b
 
 ## Run Locally
 
-Open `index.html` directly in a browser, or serve the directory locally:
+No package install or build command is required.
+
+For the most browser-like local setup, serve the directory:
 
 ```sh
 python3 -m http.server 8000
@@ -27,13 +29,13 @@ Then open:
 http://localhost:8000
 ```
 
-No package install or build command is required.
+You can also open `index.html` directly in a browser. If clipboard, import, or browser permissions behave differently from expected, use the local server command above.
 
 ## Main Workflows
 
 ### Create and Edit Prompts
 
-Use **New Prompt** to add a prompt to the library. Select a prompt from the list to edit its title, collection, tags, prompt body, and usage notes. Changes are saved automatically to local browser storage.
+Use **New Prompt** to add a prompt. Select any prompt to edit its title, collection, tags, prompt body, and usage notes. Changes save automatically to local browser storage.
 
 ### Organize the Library
 
@@ -48,11 +50,11 @@ Collections and tags are generated from the prompt metadata. Selecting a collect
 
 ### Search and Sort
 
-Use the search field to find prompts by title, prompt content, tags, notes, or collection. Sort chips reorder the visible list by updated date, created date, title, or last used date. **Clear filters** resets the current view, search, collection, tag, and sort state.
+Use search to find prompts by title, content, tags, notes, or collection. Sort chips reorder the visible list by updated date, created date, title, or last used date. **Clear filters** resets the view, search, collection, tag, and sort state.
 
 ### Reuse, Duplicate, Archive, and Delete
 
-Use **Copy Prompt** to copy the selected prompt body to the clipboard and update its recent usage metadata. Use **Duplicate** to create an editable copy. Use **Favorite** to pin useful prompts to the Favorites view. Use **Archive** to hide a prompt from the active library, or **Delete** to permanently remove it from local storage after confirmation.
+Use **Copy Prompt** to copy the selected prompt body and update recent usage. Use **Duplicate** to create an editable copy. Use **Favorite** to pin a prompt to the Favorites view. Use **Archive** to hide a prompt from the active library, or **Delete** to permanently remove it after confirmation.
 
 ### Keyboard Shortcuts
 
@@ -79,7 +81,29 @@ Imports validate the selected JSON file, then prompt for one of two modes:
 
 Import expects either an exported Prompt Shelf JSON object with a `prompts` array or a raw array of prompt objects. Invalid files, empty prompt sets, and unsupported shapes are rejected without changing local data.
 
-Because storage is browser-local, each browser profile or device has its own library. Use export and import to move prompts between browsers or keep a manual backup.
+Because storage is browser-local, each browser profile or device has its own separate library.
+
+## Backup Guidance
+
+- Export before clearing browser data, switching devices, or testing imports.
+- Keep exported JSON somewhere outside the browser profile, such as a project folder or cloud drive.
+- Test backups by importing into another browser profile with `IMPORT` first.
+- Use `REPLACE` only when you intentionally want the selected JSON file to become the full local library.
+
+## Limitations
+
+- No account sync, cloud storage, or multi-device merge.
+- Data can be lost if browser storage is cleared without an export.
+- Imports validate shape, but they do not resolve semantic duplicates beyond assigning copied IDs during `IMPORT`.
+- The app is designed for local personal use, not shared team editing.
+
+## Troubleshooting
+
+- **App shows sample prompts again**: the browser may not have existing `localStorage` data for this origin. Import a saved JSON backup if you have one.
+- **Copy does not work**: try serving the app with `python3 -m http.server 8000` and open `http://localhost:8000`.
+- **Import fails**: confirm the file is valid JSON and contains either a `prompts` array or a raw array of prompt objects.
+- **Changes are not saved**: check whether the browser blocks local storage or is running in a private profile.
+- **Port 8000 is busy**: use another port, for example `python3 -m http.server 8080`.
 
 ## Project Files
 
