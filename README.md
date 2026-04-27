@@ -178,6 +178,7 @@ The write commands require explicit issue or team arguments. The helper prints J
 - Responsive layout tested at 390px, 720px, 900px, 1040px, and 1440px
 - README covers setup, workflows, backup guidance, limitations, and troubleshooting
 - GitHub repository is connected and `main` contains the v1-ready code
+- Linear + GitHub + Codex loop check: docs-only updates can be proposed via Codex and tracked in Linear issue comments
 
 Known v1 risks:
 
