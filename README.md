@@ -186,3 +186,7 @@ Known v1 risks:
 - Import limits are fixed at 2 MB and 1,000 prompts
 - Validation summarizes cleanup instead of showing per-field import warnings
 - Mobile Safari and other non-Chromium browsers should still get a quick smoke test before broad distribution
+
+## Hermes Workflow Smoke Test Log
+
+- **2026-04-27 — EKA-23**: This Linear issue was created by Hermes and executed through Codex in this repository to validate the **Linear → Codex → GitHub** workflow loop with a harmless docs-only update.
