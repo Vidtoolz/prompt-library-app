@@ -1,13 +1,13 @@
-const STORAGE_KEY = "prompt-shelf-state-v1";
-const EXPORT_VERSION = 1;
+const {
+  PROMPT_MODEL_VERSION,
+  ensureUniquePromptIds,
+  buildImportPreview,
+  normalizePrompt: normalizePromptModel,
+  normalizeTags,
+} = window.PromptShelfModel;
+const storageAdapter = window.PromptShelfStorage;
 const RECENT_WINDOW_DAYS = 21;
 const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
-const MAX_IMPORT_PROMPTS = 1000;
-const MAX_TEXT_LENGTH = 20000;
-const MAX_TITLE_LENGTH = 160;
-const MAX_FOLDER_LENGTH = 80;
-const MAX_TAG_LENGTH = 40;
-const MAX_TAGS = 12;
 
 const seedPrompts = [
   {
@@ -154,6 +154,7 @@ const state = {
 
 const refs = {};
 let toastTimer;
+let pendingRestore = null;
 
 window.addEventListener("DOMContentLoaded", init);
 
@@ -179,6 +180,10 @@ function cacheElements() {
   refs.importButton = document.getElementById("importButton");
   refs.exportButton = document.getElementById("exportButton");
   refs.importFileInput = document.getElementById("importFileInput");
+  refs.restoreModal = document.getElementById("restoreModal");
+  refs.restorePreview = document.getElementById("restorePreview");
+  refs.cancelRestoreButton = document.getElementById("cancelRestoreButton");
+  refs.confirmRestoreButton = document.getElementById("confirmRestoreButton");
   refs.libraryTitle = document.getElementById("libraryTitle");
   refs.searchInput = document.getElementById("searchInput");
   refs.filterChips = document.getElementById("filterChips");
@@ -224,6 +229,8 @@ function bindEvents() {
   refs.importButton.addEventListener("click", () => refs.importFileInput.click());
   refs.exportButton.addEventListener("click", exportLibrary);
   refs.importFileInput.addEventListener("change", importLibrary);
+  refs.cancelRestoreButton.addEventListener("click", closeRestorePreview);
+  refs.confirmRestoreButton.addEventListener("click", confirmRestore);
   document.addEventListener("keydown", handleKeyboardShortcuts);
 
   refs.libraryList.addEventListener("click", (event) => {
@@ -311,8 +318,9 @@ function handleFormInput() {
   prompt.folder = refs.folderInput.value.trim();
   prompt.tags = parseTags(refs.tagsInput.value);
   prompt.content = refs.contentInput.value;
+  prompt.body = refs.contentInput.value;
   prompt.notes = refs.notesInput.value;
-  prompt.updatedAt = new Date().toISOString();
+  touchPrompt(prompt);
 
   const saved = persistPrompts();
   if (saved) {
@@ -330,7 +338,8 @@ function createPrompt() {
     state.activeCollection !== "all" ? state.activeCollection : "Workspace";
   const tags = state.activeTag !== "all" ? [state.activeTag] : [];
 
-  const draft = {
+  const now = new Date().toISOString();
+  const draft = normalizePromptModel({
     id: buildId(),
     title: "Untitled Prompt",
     folder: collectionName,
@@ -338,12 +347,16 @@ function createPrompt() {
     favorite: false,
     archived: false,
     useCount: 0,
+    body: "",
     content: "",
     notes: "",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    created_at: now,
+    updated_at: now,
+    createdAt: now,
+    updatedAt: now,
     lastUsedAt: null,
-  };
+    version: PROMPT_MODEL_VERSION,
+  });
 
   state.prompts.unshift(draft);
   state.view = "all";
@@ -361,7 +374,7 @@ function toggleFavorite() {
   }
 
   prompt.favorite = !prompt.favorite;
-  prompt.updatedAt = new Date().toISOString();
+  touchPrompt(prompt);
   const saved = persistPrompts();
   renderAll();
   flashSaveState(
@@ -380,7 +393,7 @@ function toggleArchive() {
   }
 
   prompt.archived = !prompt.archived;
-  prompt.updatedAt = new Date().toISOString();
+  touchPrompt(prompt);
   if (prompt.archived) {
     prompt.favorite = false;
   }
@@ -436,12 +449,7 @@ async function copySelectedPrompt() {
 }
 
 function exportLibrary() {
-  const payload = {
-    app: "Prompt Shelf",
-    version: EXPORT_VERSION,
-    exportedAt: new Date().toISOString(),
-    prompts: state.prompts,
-  };
+  const payload = storageAdapter.exportState(state.prompts);
   const blob = new Blob([JSON.stringify(payload, null, 2)], {
     type: "application/json",
   });
@@ -450,12 +458,12 @@ function exportLibrary() {
   const dateStamp = new Date().toISOString().slice(0, 10);
 
   anchor.href = url;
-  anchor.download = `prompt-shelf-export-${dateStamp}.json`;
+  anchor.download = `prompt-shelf-backup-${dateStamp}.json`;
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
-  showToast(`Exported ${state.prompts.length} prompt${state.prompts.length === 1 ? "" : "s"} to JSON.`);
+  showToast(`Backed up ${state.prompts.length} prompt${state.prompts.length === 1 ? "" : "s"} to JSON.`);
 }
 
 async function importLibrary(event) {
@@ -473,58 +481,73 @@ async function importLibrary(event) {
 
   try {
     const importedText = await file.text();
-    const parsed = JSON.parse(importedText);
-    const result = normalizeImportedPrompts(parsed);
+    const result = storageAdapter.importState(importedText);
 
     if (!result.ok) {
       showToast(result.message);
       return;
     }
 
-    const { prompts: imported, skipped, sanitized } = result;
-    const mode = window.prompt(
-      `Import ${imported.length} prompt${imported.length === 1 ? "" : "s"}.\n\nType IMPORT to add them as copies.\nType REPLACE to overwrite the current local library.`
-    );
-    const normalizedMode = mode?.trim().toUpperCase();
-
-    if (!["IMPORT", "REPLACE"].includes(normalizedMode)) {
-      showToast("Import cancelled. No local data changed.");
-      return;
-    }
-
-    const now = new Date().toISOString();
-    if (normalizedMode === "REPLACE") {
-      state.prompts = ensureUniquePromptIds(imported);
-    } else {
-      state.prompts = [
-        ...imported.map((prompt) => ({
-          ...prompt,
-          id: buildId(),
-          title: `${displayTitle(prompt)} Import`,
-          createdAt: now,
-          updatedAt: now,
-        })),
-        ...state.prompts,
-      ];
-    }
-
-    state.view = "all";
-    state.activeCollection = "all";
-    state.activeTag = "all";
-    state.query = "";
-    const saved = persistPrompts();
-    ensureSelection(true);
-    renderAll();
-    flashSaveState(
-      saved
-        ? normalizedMode === "REPLACE"
-          ? buildImportSummary("Replaced library with", imported.length, skipped, sanitized)
-          : buildImportSummary("Added", imported.length, skipped, sanitized)
-        : "Import loaded, but not saved locally."
-    );
+    showRestorePreview(result);
   } catch (error) {
     showToast("Import failed: choose a valid JSON export.");
   }
+}
+
+function showRestorePreview(result) {
+  pendingRestore = result;
+  const preview = buildRestorePreview(result);
+  refs.restorePreview.replaceChildren();
+
+  [
+    ["Prompts to import", preview.promptCount],
+    ["Schema version", preview.schemaVersion],
+    ["Folders", preview.folderCount],
+    ["Tags", preview.tagCount],
+  ].forEach(([label, value]) => {
+    const row = document.createElement("div");
+    row.className = "restore-preview-row";
+    const labelElement = document.createElement("span");
+    const valueElement = document.createElement("strong");
+    labelElement.textContent = label;
+    valueElement.textContent = String(value);
+    row.append(labelElement, valueElement);
+    refs.restorePreview.append(row);
+  });
+
+  refs.restoreModal.hidden = false;
+  refs.confirmRestoreButton.focus();
+}
+
+function closeRestorePreview() {
+  pendingRestore = null;
+  refs.restoreModal.hidden = true;
+  refs.importButton.focus();
+  showToast("Restore cancelled. No local data changed.");
+}
+
+function confirmRestore() {
+  if (!pendingRestore?.ok) {
+    closeRestorePreview();
+    return;
+  }
+
+  const { prompts: imported, skipped, sanitized } = pendingRestore;
+  state.prompts = ensureUniquePromptIds(imported.map(normalizePromptModel));
+  state.view = "all";
+  state.activeCollection = "all";
+  state.activeTag = "all";
+  state.query = "";
+  pendingRestore = null;
+  refs.restoreModal.hidden = true;
+  const saved = persistPrompts();
+  ensureSelection(true);
+  renderAll();
+  flashSaveState(
+    saved
+      ? buildImportSummary("Restored library with", imported.length, skipped, sanitized)
+      : "Restore loaded, but not saved locally."
+  );
 }
 
 function duplicateSelectedPrompt() {
@@ -533,6 +556,7 @@ function duplicateSelectedPrompt() {
     return;
   }
 
+  const now = new Date().toISOString();
   const duplicate = {
     ...structuredClone(prompt),
     id: buildId(),
@@ -540,10 +564,15 @@ function duplicateSelectedPrompt() {
     favorite: false,
     archived: false,
     useCount: 0,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
+    created_at: now,
+    updated_at: now,
+    version: PROMPT_MODEL_VERSION,
     lastUsedAt: null,
   };
+  duplicate.body = getPromptBody(duplicate);
+  duplicate.content = getPromptBody(duplicate);
 
   state.prompts.unshift(duplicate);
   state.view = "all";
@@ -694,7 +723,7 @@ function renderList() {
 
     const meta = document.createElement("p");
     meta.className = "row-meta";
-    meta.textContent = `${displayFolder(prompt.folder)}  |  Updated ${formatRelative(prompt.updatedAt)}`;
+    meta.textContent = `${displayFolder(prompt.folder)}  |  Updated ${formatRelative(getUpdatedAt(prompt))}`;
 
     const headerWrap = document.createElement("div");
     headerWrap.className = "row-title-wrap";
@@ -715,7 +744,7 @@ function renderList() {
 
     const snippet = document.createElement("p");
     snippet.className = "row-snippet";
-    snippet.textContent = prompt.content.trim() || "No prompt text yet.";
+    snippet.textContent = getPromptBody(prompt).trim() || "No prompt text yet.";
 
     const footer = document.createElement("div");
     footer.className = "row-footer";
@@ -773,13 +802,13 @@ function renderDetail() {
   refs.titleInput.value = prompt.title;
   refs.folderInput.value = prompt.folder;
   refs.tagsInput.value = prompt.tags.join(", ");
-  refs.contentInput.value = prompt.content;
+  refs.contentInput.value = getPromptBody(prompt);
   refs.notesInput.value = prompt.notes;
   refs.favoriteToggle.textContent = prompt.favorite ? "Favorited" : "Favorite";
   refs.archiveToggle.textContent = prompt.archived ? "Restore" : "Archive";
   syncDetailMeta(prompt);
   syncPreview(prompt);
-  refs.saveStatus.textContent = `Saved locally · ${formatRelative(prompt.updatedAt)}`;
+  refs.saveStatus.textContent = `Saved locally · ${formatRelative(getUpdatedAt(prompt))}`;
 }
 
 function syncControls() {
@@ -796,7 +825,7 @@ function syncControls() {
 
 function syncDetailMeta(prompt) {
   refs.summaryFolder.textContent = displayFolder(prompt.folder);
-  refs.summaryUpdated.textContent = formatLongDate(prompt.updatedAt);
+  refs.summaryUpdated.textContent = formatLongDate(getUpdatedAt(prompt));
   refs.summaryUsed.textContent = prompt.lastUsedAt
     ? formatRelative(prompt.lastUsedAt)
     : "Never copied";
@@ -814,7 +843,7 @@ function syncPreview(prompt) {
     `Collection: ${displayFolder(prompt.folder)}`,
     `Tags: ${prompt.tags.length ? prompt.tags.join(", ") : "None"}`,
     "",
-    prompt.content.trim() || "No prompt text yet.",
+    getPromptBody(prompt).trim() || "No prompt text yet.",
   ];
 
   if (prompt.notes.trim()) {
@@ -862,6 +891,11 @@ function handleKeyboardShortcuts(event) {
   }
 
   if (event.key === "Escape") {
+    if (!refs.restoreModal.hidden) {
+      closeRestorePreview();
+      return;
+    }
+
     if (!isEditing && hasActiveFilters()) {
       clearFilters();
       showToast("Filters cleared.");
@@ -1070,14 +1104,14 @@ function comparePrompts(left, right, sortMode) {
   }
 
   if (sortMode === "created") {
-    return new Date(right.createdAt) - new Date(left.createdAt);
+    return new Date(getCreatedAt(right)) - new Date(getCreatedAt(left));
   }
 
   if (sortMode === "used") {
     return new Date(right.lastUsedAt || 0) - new Date(left.lastUsedAt || 0);
   }
 
-  return new Date(right.updatedAt) - new Date(left.updatedAt);
+  return new Date(getUpdatedAt(right)) - new Date(getUpdatedAt(left));
 }
 
 function buildLibraryTitle(count) {
@@ -1130,214 +1164,43 @@ function displayTitle(prompt) {
   return prompt.title.trim() || "Untitled Prompt";
 }
 
+function buildRestorePreview(result) {
+  return buildImportPreview(result);
+}
+
+function getPromptBody(prompt) {
+  return typeof prompt.body === "string" ? prompt.body : prompt.content || "";
+}
+
+function getUpdatedAt(prompt) {
+  return prompt.updated_at || prompt.updatedAt;
+}
+
+function getCreatedAt(prompt) {
+  return prompt.created_at || prompt.createdAt;
+}
+
+function touchPrompt(prompt) {
+  const now = new Date().toISOString();
+  prompt.updated_at = now;
+  prompt.updatedAt = now;
+  prompt.version = PROMPT_MODEL_VERSION;
+}
+
 function displayFolder(folder) {
-  return folder.trim() || "Workspace";
+  return typeof folder === "string" && folder.trim() ? folder.trim() : "Workspace";
 }
 
 function buildSearchBlob(prompt) {
   return [
     prompt.title,
     prompt.folder,
-    prompt.content,
+    getPromptBody(prompt),
     prompt.notes,
     prompt.tags.join(" "),
   ]
     .join(" ")
     .toLowerCase();
-}
-
-function normalizeImportedPrompts(parsed) {
-  const candidates = Array.isArray(parsed) ? parsed : parsed?.prompts;
-
-  if (!Array.isArray(candidates)) {
-    return {
-      ok: false,
-      message: "Import failed: expected a prompts array.",
-    };
-  }
-
-  if (!candidates.length) {
-    return {
-      ok: false,
-      message: "Import failed: the prompts array is empty.",
-    };
-  }
-
-  if (candidates.length > MAX_IMPORT_PROMPTS) {
-    return {
-      ok: false,
-      message: `Import failed: limit is ${MAX_IMPORT_PROMPTS} prompts per file.`,
-    };
-  }
-
-  const normalized = [];
-  let skipped = 0;
-  let sanitized = 0;
-
-  candidates.forEach((candidate) => {
-    const result = normalizeImportedPrompt(candidate);
-    if (!result.prompt) {
-      skipped += 1;
-      return;
-    }
-
-    if (result.sanitized) {
-      sanitized += 1;
-    }
-    normalized.push(result.prompt);
-  });
-
-  if (!normalized.length) {
-    return {
-      ok: false,
-      message: "Import failed: no valid prompts found.",
-    };
-  }
-
-  const duplicateIds = countDuplicateIds(normalized);
-
-  return {
-    ok: true,
-    prompts: ensureUniquePromptIds(normalized),
-    skipped,
-    sanitized: sanitized + duplicateIds,
-  };
-}
-
-function normalizePrompt(prompt) {
-  return normalizeImportedPrompt(prompt).prompt || createEmptyPromptSnapshot();
-}
-
-function normalizeImportedPrompt(prompt) {
-  if (!prompt || typeof prompt !== "object" || Array.isArray(prompt)) {
-    return { prompt: null, sanitized: false };
-  }
-
-  const now = new Date().toISOString();
-  const title = normalizeTextField(prompt.title, MAX_TITLE_LENGTH);
-  const folder = normalizeTextField(prompt.folder, MAX_FOLDER_LENGTH) || "Workspace";
-  const content = normalizeTextField(prompt.content, MAX_TEXT_LENGTH);
-  const notes = normalizeTextField(prompt.notes, MAX_TEXT_LENGTH);
-  const tags = normalizeTags(prompt.tags);
-  const useCount = normalizeUseCount(prompt.useCount);
-  const createdAt = isValidDate(prompt.createdAt) ? prompt.createdAt : now;
-  const updatedAt = isValidDate(prompt.updatedAt) ? prompt.updatedAt : now;
-  const lastUsedAt = isValidDate(prompt.lastUsedAt) ? prompt.lastUsedAt : null;
-
-  const normalized = {
-    id: normalizeId(prompt.id),
-    title,
-    folder,
-    tags,
-    favorite: prompt.favorite === true,
-    archived: prompt.archived === true,
-    useCount,
-    content,
-    notes,
-    createdAt,
-    updatedAt,
-    lastUsedAt,
-  };
-
-  if (!normalized.title && !normalized.content && !normalized.notes) {
-    return { prompt: null, sanitized: false };
-  }
-
-  return {
-    prompt: normalized,
-    sanitized: didSanitizePrompt(prompt, normalized),
-  };
-}
-
-function createEmptyPromptSnapshot() {
-  const now = new Date().toISOString();
-  return {
-    id: buildId(),
-    title: "",
-    folder: "Workspace",
-    tags: [],
-    favorite: false,
-    archived: false,
-    useCount: 0,
-    content: "",
-    notes: "",
-    createdAt: now,
-    updatedAt: now,
-    lastUsedAt: null,
-  };
-}
-
-function normalizeId(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : buildId();
-}
-
-function normalizeTextField(value, maxLength) {
-  if (typeof value !== "string") {
-    return "";
-  }
-
-  return value.trim().slice(0, maxLength);
-}
-
-function normalizeTags(value) {
-  const rawTags = Array.isArray(value)
-    ? value
-    : typeof value === "string"
-      ? value.split(",")
-      : [];
-  const seen = new Set();
-  const tags = [];
-
-  rawTags.forEach((tag) => {
-    if (typeof tag !== "string") {
-      return;
-    }
-
-    const normalized = tag.trim().slice(0, MAX_TAG_LENGTH);
-    const key = normalized.toLowerCase();
-    if (!normalized || seen.has(key)) {
-      return;
-    }
-
-    seen.add(key);
-    tags.push(normalized);
-  });
-
-  return tags.slice(0, MAX_TAGS);
-}
-
-function normalizeUseCount(value) {
-  const useCount = Number(value);
-  if (!Number.isFinite(useCount) || useCount <= 0) {
-    return 0;
-  }
-
-  return Math.min(Math.floor(useCount), 999999);
-}
-
-function didSanitizePrompt(original, normalized) {
-  const originalId = typeof original.id === "string" ? original.id.trim() : "";
-  const originalFolder = normalizeTextField(original.folder, MAX_FOLDER_LENGTH) || "Workspace";
-  const originalTags = Array.isArray(original.tags)
-    ? original.tags.filter((tag) => typeof tag === "string").map((tag) => tag.trim()).filter(Boolean)
-    : typeof original.tags === "string"
-      ? original.tags.split(",").map((tag) => tag.trim()).filter(Boolean)
-      : [];
-
-  return (
-    originalId !== normalized.id ||
-    normalizeTextField(original.title, MAX_TITLE_LENGTH) !== normalized.title ||
-    originalFolder !== normalized.folder ||
-    normalizeTextField(original.content, MAX_TEXT_LENGTH) !== normalized.content ||
-    normalizeTextField(original.notes, MAX_TEXT_LENGTH) !== normalized.notes ||
-    normalizeUseCount(original.useCount) !== normalized.useCount ||
-    original.favorite !== normalized.favorite ||
-    original.archived !== normalized.archived ||
-    !isValidDate(original.createdAt) ||
-    !isValidDate(original.updatedAt) ||
-    (original.lastUsedAt !== null && original.lastUsedAt !== undefined && !isValidDate(original.lastUsedAt)) ||
-    originalTags.join("\u0000") !== normalized.tags.join("\u0000")
-  );
 }
 
 function buildImportSummary(action, importedCount, skippedCount, sanitizedCount) {
@@ -1354,50 +1217,8 @@ function buildImportSummary(action, importedCount, skippedCount, sanitizedCount)
   return parts.join(" ");
 }
 
-function countDuplicateIds(prompts) {
-  const seenIds = new Set();
-  let duplicates = 0;
-
-  prompts.forEach((prompt) => {
-    if (seenIds.has(prompt.id)) {
-      duplicates += 1;
-      return;
-    }
-
-    seenIds.add(prompt.id);
-  });
-
-  return duplicates;
-}
-
-function ensureUniquePromptIds(prompts) {
-  const seenIds = new Set();
-
-  return prompts.map((prompt) => {
-    if (!seenIds.has(prompt.id)) {
-      seenIds.add(prompt.id);
-      return prompt;
-    }
-
-    let uniqueId = buildId();
-    while (seenIds.has(uniqueId)) {
-      uniqueId = buildId();
-    }
-
-    const promptWithUniqueId = {
-      ...prompt,
-      id: uniqueId,
-    };
-    seenIds.add(promptWithUniqueId.id);
-    return promptWithUniqueId;
-  });
-}
-
 function parseTags(value) {
-  return value
-    .split(",")
-    .map((tag) => tag.trim())
-    .filter(Boolean);
+  return normalizeTags(value);
 }
 
 function isRecent(dateString) {
@@ -1454,7 +1275,7 @@ function isValidDate(value) {
 }
 
 function buildCopyPayload(prompt) {
-  const lines = [prompt.content.trim()];
+  const lines = [getPromptBody(prompt).trim()];
 
   if (prompt.notes.trim()) {
     lines.push("", `Notes: ${prompt.notes.trim()}`);
@@ -1484,53 +1305,14 @@ function fallbackCopy(value) {
 }
 
 function loadPrompts() {
-  let saved;
-
-  try {
-    saved = window.localStorage.getItem(STORAGE_KEY);
-  } catch (error) {
-    storageAvailable = false;
-    return structuredClone(seedPrompts);
-  }
-
-  if (!saved) {
-    const seededPrompts = structuredClone(seedPrompts);
-    persistPromptSnapshot(seededPrompts);
-    return seededPrompts;
-  }
-
-  try {
-    const parsed = JSON.parse(saved);
-    if (!Array.isArray(parsed)) {
-      return structuredClone(seedPrompts);
-    }
-
-    const normalizedPrompts = ensureUniquePromptIds(parsed.map(normalizePrompt));
-    const normalizedSnapshot = JSON.stringify(normalizedPrompts);
-
-    if (normalizedSnapshot !== saved) {
-      persistPromptSnapshot(normalizedPrompts);
-    }
-
-    return normalizedPrompts;
-  } catch (error) {
-    return structuredClone(seedPrompts);
-  }
-}
-
-function persistPromptSnapshot(prompts) {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(prompts));
-    storageAvailable = true;
-    return true;
-  } catch (error) {
-    storageAvailable = false;
-    return false;
-  }
+  const result = storageAdapter.loadState({ defaultPrompts: structuredClone(seedPrompts) });
+  storageAvailable = result.storageAvailable;
+  return result.prompts;
 }
 
 function persistPrompts() {
-  if (!persistPromptSnapshot(state.prompts)) {
+  const result = storageAdapter.saveState(state.prompts);
+  if (!result.ok) {
     storageAvailable = false;
     if (refs.saveStatus) {
       refs.saveStatus.textContent = "Unable to save locally.";
@@ -1545,6 +1327,7 @@ function persistPrompts() {
     return false;
   }
 
+  storageAvailable = true;
   return true;
 }
 

@@ -10,7 +10,7 @@ It runs as a static site with no build step. Prompt data stays in your browser t
 - Search prompts by title, content, tags, notes, or collection
 - Filter by library view, collection, tag, and sort order
 - Copy prompt content and track recent usage
-- Import and export the library as JSON
+- Backup and restore the library as JSON
 - Seeded sample prompts for first-run use
 
 ## Run Locally
@@ -30,6 +30,20 @@ http://localhost:8000
 ```
 
 You can also open `index.html` directly in a browser. If clipboard, import, or browser permissions behave differently from expected, use the local server command above.
+
+## Tests
+
+The app has a dependency-free Node test harness for the prompt model and backup/restore logic:
+
+```sh
+node tests/run-tests.js
+```
+
+Run a syntax check for the browser app script with:
+
+```sh
+node --check app.js
+```
 
 ## Main Workflows
 
@@ -68,29 +82,45 @@ Use **Copy Prompt** to copy the selected prompt body and update recent usage. Us
 
 Prompt data is saved under the browser storage key `prompt-shelf-state-v1`.
 
-Exported JSON includes:
+The app now normalizes prompts to a v2-ready local model while preserving the existing v1 localStorage behavior. Each prompt keeps the current app fields and also carries the durable model fields:
+
+- `id`
+- `title`
+- `body`
+- `tags`
+- `folder`
+- `favorite`
+- `created_at`
+- `updated_at`
+- `version`
+- `archived`
+
+Legacy aliases such as `content`, `createdAt`, and `updatedAt` are still written for compatibility with older exports and existing browser data.
+
+Browser storage is accessed through `storage-adapter.js`, which preserves the existing `prompt-shelf-state-v1` key while keeping load/save/import/export behind a small interface for future IndexedDB or sync work.
+
+Backup JSON includes:
 
 - `version`
+- `schemaVersion`
 - `exportedAt`
+- `counts`
 - `prompts`
 
-Imports validate the selected JSON file, then prompt for one of two modes:
+Restore/import validates the selected JSON file, then shows a preview before changing local data. The preview includes prompt count, schema version, folder count, and tag count. Confirming restore replaces the current local library; cancelling leaves local data unchanged.
 
-- `IMPORT` adds the imported prompts as copies
-- `REPLACE` overwrites the current local library
-
-Import expects either an exported Prompt Shelf JSON object with a `prompts` array or a raw array of prompt objects. Invalid files, empty prompt sets, and unsupported shapes are rejected without changing local data.
+Import expects either an exported Prompt Shelf JSON object with a `prompts` array or a raw array of prompt objects. Invalid files, empty prompt sets, and unsupported shapes are rejected without changing local data. Imports accept both v2 `body` and legacy `content` prompt text.
 
 Because storage is browser-local, each browser profile or device has its own separate library.
 
 Import limits are intentionally modest: JSON files must be 2 MB or smaller and contain no more than 1,000 prompts. During import, Prompt Shelf repairs duplicate IDs, normalizes dates, trims long text fields, cleans tags, and skips entries that do not contain a title, prompt body, or notes.
 
-## Backup Guidance
+## Backup / Restore Guidance
 
-- Export before clearing browser data, switching devices, or testing imports.
+- Use **Backup JSON** before clearing browser data, switching devices, or testing imports.
 - Keep exported JSON somewhere outside the browser profile, such as a project folder or cloud drive.
-- Test backups by importing into another browser profile with `IMPORT` first.
-- Use `REPLACE` only when you intentionally want the selected JSON file to become the full local library.
+- Test backups by restoring into another browser profile first.
+- Use restore only when you intentionally want the selected JSON file to become the full local library.
 
 ## Limitations
 
@@ -111,7 +141,10 @@ Import limits are intentionally modest: JSON files must be 2 MB or smaller and c
 
 - `index.html` defines the static app structure
 - `styles.css` contains the full responsive UI styling
-- `app.js` contains state management, rendering, local storage, import/export, and keyboard shortcuts
+- `prompt-model.js` contains dependency-free prompt normalization, backup, and import helpers shared by browser and Node tests
+- `storage-adapter.js` contains the localStorage-backed load/save/import/export adapter
+- `app.js` contains state management, rendering, local storage, import/export UI wiring, and keyboard shortcuts
+- `tests/run-tests.js` runs the dependency-free model and backup/restore tests with Node
 - `scripts/linear.mjs` provides a small Linear GraphQL helper for Hermes workflows
 
 ## Linear Helper

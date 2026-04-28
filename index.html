@@ -73,12 +73,15 @@
         <div class="sidebar-footer">
           <div class="utility-actions">
             <button id="importButton" class="ghost-button utility-button" type="button">
-              Import JSON
+              Restore JSON
             </button>
             <button id="exportButton" class="ghost-button utility-button" type="button">
-              Export JSON
+              Backup JSON
             </button>
           </div>
+          <p class="backup-note">
+            Backups export the full local prompt model. Restore can import as copies or replace the local library.
+          </p>
           <div class="shortcut-panel" aria-label="Keyboard shortcuts">
             <p class="section-label">Shortcuts</p>
             <div class="shortcut-grid">
@@ -256,8 +259,31 @@
 
     <datalist id="folderOptions"></datalist>
     <input id="importFileInput" class="visually-hidden" type="file" accept="application/json,.json" />
+    <div id="restoreModal" class="modal-backdrop" hidden>
+      <section
+        class="modal-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="restoreModalTitle"
+      >
+        <div class="modal-header">
+          <p class="eyebrow">Restore JSON</p>
+          <h2 id="restoreModalTitle">Review backup before restoring</h2>
+        </div>
+        <div id="restorePreview" class="restore-preview"></div>
+        <p class="modal-warning">
+          Restore replaces the current local prompt library. Create a backup first if you need to keep the current state.
+        </p>
+        <div class="modal-actions">
+          <button id="cancelRestoreButton" class="ghost-button" type="button">Cancel</button>
+          <button id="confirmRestoreButton" class="primary-button" type="button">Confirm Restore</button>
+        </div>
+      </section>
+    </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+    <script src="prompt-model.js"></script>
+    <script src="storage-adapter.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
