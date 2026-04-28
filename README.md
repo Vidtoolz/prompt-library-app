@@ -97,6 +97,8 @@ The app now normalizes prompts to a v2-ready local model while preserving the ex
 
 Legacy aliases such as `content`, `createdAt`, and `updatedAt` are still written for compatibility with older exports and existing browser data.
 
+Browser storage is accessed through `storage-adapter.js`, which preserves the existing `prompt-shelf-state-v1` key while keeping load/save/import/export behind a small interface for future IndexedDB or sync work.
+
 Backup JSON includes:
 
 - `version`
@@ -143,6 +145,7 @@ Import limits are intentionally modest: JSON files must be 2 MB or smaller and c
 - `index.html` defines the static app structure
 - `styles.css` contains the full responsive UI styling
 - `prompt-model.js` contains dependency-free prompt normalization, backup, and import helpers shared by browser and Node tests
+- `storage-adapter.js` contains the localStorage-backed load/save/import/export adapter
 - `app.js` contains state management, rendering, local storage, import/export UI wiring, and keyboard shortcuts
 - `tests/run-tests.js` runs the dependency-free model and backup/restore tests with Node
 - `scripts/linear.mjs` provides a small Linear GraphQL helper for Hermes workflows

@@ -1,10 +1,26 @@
 const assert = require("node:assert/strict");
 const model = require("../prompt-model.js");
+const storage = require("../storage-adapter.js");
 
 const tests = [];
 
 function test(name, fn) {
   tests.push({ name, fn });
+}
+
+function createFakeStorage(initial = {}) {
+  const values = new Map(Object.entries(initial));
+  return {
+    getItem(key) {
+      return values.has(key) ? values.get(key) : null;
+    },
+    setItem(key, value) {
+      values.set(key, String(value));
+    },
+    removeItem(key) {
+      values.delete(key);
+    },
+  };
 }
 
 test("legacy prompt with content becomes normalized prompt with body", () => {
@@ -98,6 +114,52 @@ test("invalid JSON and import shape are rejected", () => {
 
   assert.equal(invalidJson.ok, false);
   assert.equal(invalidShape.ok, false);
+});
+
+test("storage adapter keeps the v1 localStorage key", () => {
+  assert.equal(storage.getStorageKey(), "prompt-shelf-state-v1");
+});
+
+test("storage adapter saves and loads through fake localStorage", () => {
+  const fakeStorage = createFakeStorage();
+  const saved = storage.saveState(
+    [{ id: "stored", title: "Stored", body: "Stored body" }],
+    { storage: fakeStorage }
+  );
+  const loaded = storage.loadState({ storage: fakeStorage, defaultPrompts: [] });
+
+  assert.equal(saved.ok, true);
+  assert.equal(loaded.ok, true);
+  assert.equal(loaded.prompts.length, 1);
+  assert.equal(loaded.prompts[0].body, "Stored body");
+});
+
+test("corrupted localStorage returns safe default", () => {
+  const fakeStorage = createFakeStorage({
+    "prompt-shelf-state-v1": "{not json",
+  });
+  const loaded = storage.loadState({
+    storage: fakeStorage,
+    defaultPrompts: [{ id: "safe", title: "Safe", body: "Fallback" }],
+  });
+
+  assert.equal(loaded.ok, false);
+  assert.equal(loaded.storageAvailable, true);
+  assert.equal(loaded.prompts.length, 1);
+  assert.equal(loaded.prompts[0].body, "Fallback");
+});
+
+test("storage adapter import and export pass through model validation", () => {
+  const exported = storage.exportState([
+    { id: "backup", title: "Backup", body: "Backup body", favorite: true },
+  ]);
+  const imported = storage.importState(JSON.stringify(exported));
+
+  assert.equal(exported.schemaVersion, 2);
+  assert.equal(exported.counts.prompts, 1);
+  assert.equal(exported.counts.favorites, 1);
+  assert.equal(imported.ok, true);
+  assert.equal(imported.prompts[0].body, "Backup body");
 });
 
 let failures = 0;

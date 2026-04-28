@@ -1,13 +1,10 @@
-const STORAGE_KEY = "prompt-shelf-state-v1";
 const {
   PROMPT_MODEL_VERSION,
-  buildExportPayload,
   ensureUniquePromptIds,
-  normalizeImportedPrompts,
-  normalizePrompt,
   normalizePrompt: normalizePromptModel,
   normalizeTags,
 } = window.PromptShelfModel;
+const storageAdapter = window.PromptShelfStorage;
 const RECENT_WINDOW_DAYS = 21;
 const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
 
@@ -444,7 +441,7 @@ async function copySelectedPrompt() {
 }
 
 function exportLibrary() {
-  const payload = buildExportPayload(state.prompts);
+  const payload = storageAdapter.exportState(state.prompts);
   const blob = new Blob([JSON.stringify(payload, null, 2)], {
     type: "application/json",
   });
@@ -476,8 +473,7 @@ async function importLibrary(event) {
 
   try {
     const importedText = await file.text();
-    const parsed = JSON.parse(importedText);
-    const result = normalizeImportedPrompts(parsed);
+    const result = storageAdapter.importState(importedText);
 
     if (!result.ok) {
       showToast(result.message);
@@ -1281,53 +1277,14 @@ function fallbackCopy(value) {
 }
 
 function loadPrompts() {
-  let saved;
-
-  try {
-    saved = window.localStorage.getItem(STORAGE_KEY);
-  } catch (error) {
-    storageAvailable = false;
-    return structuredClone(seedPrompts);
-  }
-
-  if (!saved) {
-    const seededPrompts = structuredClone(seedPrompts).map(normalizePromptModel);
-    persistPromptSnapshot(seededPrompts);
-    return seededPrompts;
-  }
-
-  try {
-    const parsed = JSON.parse(saved);
-    if (!Array.isArray(parsed)) {
-      return structuredClone(seedPrompts);
-    }
-
-    const normalizedPrompts = ensureUniquePromptIds(parsed.map(normalizePrompt));
-    const normalizedSnapshot = JSON.stringify(normalizedPrompts);
-
-    if (normalizedSnapshot !== saved) {
-      persistPromptSnapshot(normalizedPrompts);
-    }
-
-    return normalizedPrompts;
-  } catch (error) {
-    return structuredClone(seedPrompts);
-  }
-}
-
-function persistPromptSnapshot(prompts) {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(prompts));
-    storageAvailable = true;
-    return true;
-  } catch (error) {
-    storageAvailable = false;
-    return false;
-  }
+  const result = storageAdapter.loadState({ defaultPrompts: structuredClone(seedPrompts) });
+  storageAvailable = result.storageAvailable;
+  return result.prompts;
 }
 
 function persistPrompts() {
-  if (!persistPromptSnapshot(state.prompts)) {
+  const result = storageAdapter.saveState(state.prompts);
+  if (!result.ok) {
     storageAvailable = false;
     if (refs.saveStatus) {
       refs.saveStatus.textContent = "Unable to save locally.";
@@ -1342,6 +1299,7 @@ function persistPrompts() {
     return false;
   }
 
+  storageAvailable = true;
   return true;
 }
 
