@@ -107,10 +107,7 @@ Backup JSON includes:
 - `counts`
 - `prompts`
 
-Restore/import validates the selected JSON file, then prompts for one of two modes:
-
-- `IMPORT` adds the imported prompts as copies
-- `REPLACE` overwrites the current local library
+Restore/import validates the selected JSON file, then shows a preview before changing local data. The preview includes prompt count, schema version, folder count, and tag count. Confirming restore replaces the current local library; cancelling leaves local data unchanged.
 
 Import expects either an exported Prompt Shelf JSON object with a `prompts` array or a raw array of prompt objects. Invalid files, empty prompt sets, and unsupported shapes are rejected without changing local data. Imports accept both v2 `body` and legacy `content` prompt text.
 
@@ -122,8 +119,8 @@ Import limits are intentionally modest: JSON files must be 2 MB or smaller and c
 
 - Use **Backup JSON** before clearing browser data, switching devices, or testing imports.
 - Keep exported JSON somewhere outside the browser profile, such as a project folder or cloud drive.
-- Test backups by restoring into another browser profile with `IMPORT` first.
-- Use `REPLACE` only when you intentionally want the selected JSON file to become the full local library.
+- Test backups by restoring into another browser profile first.
+- Use restore only when you intentionally want the selected JSON file to become the full local library.
 
 ## Limitations
 

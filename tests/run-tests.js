@@ -116,6 +116,22 @@ test("invalid JSON and import shape are rejected", () => {
   assert.equal(invalidShape.ok, false);
 });
 
+test("import preview reports prompt schema folder and tag counts", () => {
+  const result = model.normalizeImportedPrompts({
+    schemaVersion: 2,
+    prompts: [
+      { id: "one", title: "One", body: "Body", folder: "Ops", tags: ["a", "b"] },
+      { id: "two", title: "Two", body: "Body", folder: "Research", tags: ["b", "c"] },
+    ],
+  });
+  const preview = model.buildImportPreview(result);
+
+  assert.equal(preview.promptCount, 2);
+  assert.equal(preview.schemaVersion, 2);
+  assert.equal(preview.folderCount, 2);
+  assert.equal(preview.tagCount, 3);
+});
+
 test("storage adapter keeps the v1 localStorage key", () => {
   assert.equal(storage.getStorageKey(), "prompt-shelf-state-v1");
 });

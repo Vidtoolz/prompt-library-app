@@ -76,6 +76,7 @@
       prompts: ensureUniquePromptIds(normalized),
       skipped,
       sanitized: sanitized + duplicateIds,
+      schemaVersion: parsed?.schemaVersion || parsed?.version || null,
     };
   }
 
@@ -88,6 +89,24 @@
         message: "Import failed: choose a valid JSON export.",
       };
     }
+  }
+
+  function buildImportPreview(importResult) {
+    const prompts = Array.isArray(importResult?.prompts) ? importResult.prompts : [];
+    const folders = new Set();
+    const tags = new Set();
+
+    prompts.forEach((prompt) => {
+      folders.add(prompt.folder || "Workspace");
+      (prompt.tags || []).forEach((tag) => tags.add(tag));
+    });
+
+    return {
+      promptCount: prompts.length,
+      schemaVersion: importResult?.schemaVersion || "unknown",
+      folderCount: folders.size,
+      tagCount: tags.size,
+    };
   }
 
   function normalizeImportedPrompt(prompt) {
@@ -333,6 +352,7 @@
     EXPORT_VERSION,
     PROMPT_MODEL_VERSION,
     buildExportPayload,
+    buildImportPreview,
     createEmptyPromptSnapshot,
     ensureUniquePromptIds,
     normalizeImportedPrompt,

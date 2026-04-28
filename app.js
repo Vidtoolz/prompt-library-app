@@ -1,6 +1,7 @@
 const {
   PROMPT_MODEL_VERSION,
   ensureUniquePromptIds,
+  buildImportPreview,
   normalizePrompt: normalizePromptModel,
   normalizeTags,
 } = window.PromptShelfModel;
@@ -153,6 +154,7 @@ const state = {
 
 const refs = {};
 let toastTimer;
+let pendingRestore = null;
 
 window.addEventListener("DOMContentLoaded", init);
 
@@ -178,6 +180,10 @@ function cacheElements() {
   refs.importButton = document.getElementById("importButton");
   refs.exportButton = document.getElementById("exportButton");
   refs.importFileInput = document.getElementById("importFileInput");
+  refs.restoreModal = document.getElementById("restoreModal");
+  refs.restorePreview = document.getElementById("restorePreview");
+  refs.cancelRestoreButton = document.getElementById("cancelRestoreButton");
+  refs.confirmRestoreButton = document.getElementById("confirmRestoreButton");
   refs.libraryTitle = document.getElementById("libraryTitle");
   refs.searchInput = document.getElementById("searchInput");
   refs.filterChips = document.getElementById("filterChips");
@@ -223,6 +229,8 @@ function bindEvents() {
   refs.importButton.addEventListener("click", () => refs.importFileInput.click());
   refs.exportButton.addEventListener("click", exportLibrary);
   refs.importFileInput.addEventListener("change", importLibrary);
+  refs.cancelRestoreButton.addEventListener("click", closeRestorePreview);
+  refs.confirmRestoreButton.addEventListener("click", confirmRestore);
   document.addEventListener("keydown", handleKeyboardShortcuts);
 
   refs.libraryList.addEventListener("click", (event) => {
@@ -480,55 +488,66 @@ async function importLibrary(event) {
       return;
     }
 
-    const { prompts: imported, skipped, sanitized } = result;
-    const mode = window.prompt(
-      `Import ${imported.length} prompt${imported.length === 1 ? "" : "s"}.\n\nType IMPORT to add them as copies.\nType REPLACE to overwrite the current local library.`
-    );
-    const normalizedMode = mode?.trim().toUpperCase();
-
-    if (!["IMPORT", "REPLACE"].includes(normalizedMode)) {
-      showToast("Import cancelled. No local data changed.");
-      return;
-    }
-
-    const now = new Date().toISOString();
-    if (normalizedMode === "REPLACE") {
-      state.prompts = ensureUniquePromptIds(imported.map(normalizePromptModel));
-    } else {
-      state.prompts = [
-        ...imported.map((prompt) => normalizePromptModel({
-          ...prompt,
-          id: buildId(),
-          title: `${displayTitle(prompt)} Import`,
-          body: getPromptBody(prompt),
-          content: getPromptBody(prompt),
-          createdAt: now,
-          updatedAt: now,
-          created_at: now,
-          updated_at: now,
-          version: PROMPT_MODEL_VERSION,
-        })),
-        ...state.prompts,
-      ];
-    }
-
-    state.view = "all";
-    state.activeCollection = "all";
-    state.activeTag = "all";
-    state.query = "";
-    const saved = persistPrompts();
-    ensureSelection(true);
-    renderAll();
-    flashSaveState(
-      saved
-        ? normalizedMode === "REPLACE"
-          ? buildImportSummary("Replaced library with", imported.length, skipped, sanitized)
-          : buildImportSummary("Added", imported.length, skipped, sanitized)
-        : "Import loaded, but not saved locally."
-    );
+    showRestorePreview(result);
   } catch (error) {
     showToast("Import failed: choose a valid JSON export.");
   }
+}
+
+function showRestorePreview(result) {
+  pendingRestore = result;
+  const preview = buildRestorePreview(result);
+  refs.restorePreview.replaceChildren();
+
+  [
+    ["Prompts to import", preview.promptCount],
+    ["Schema version", preview.schemaVersion],
+    ["Folders", preview.folderCount],
+    ["Tags", preview.tagCount],
+  ].forEach(([label, value]) => {
+    const row = document.createElement("div");
+    row.className = "restore-preview-row";
+    const labelElement = document.createElement("span");
+    const valueElement = document.createElement("strong");
+    labelElement.textContent = label;
+    valueElement.textContent = String(value);
+    row.append(labelElement, valueElement);
+    refs.restorePreview.append(row);
+  });
+
+  refs.restoreModal.hidden = false;
+  refs.confirmRestoreButton.focus();
+}
+
+function closeRestorePreview() {
+  pendingRestore = null;
+  refs.restoreModal.hidden = true;
+  refs.importButton.focus();
+  showToast("Restore cancelled. No local data changed.");
+}
+
+function confirmRestore() {
+  if (!pendingRestore?.ok) {
+    closeRestorePreview();
+    return;
+  }
+
+  const { prompts: imported, skipped, sanitized } = pendingRestore;
+  state.prompts = ensureUniquePromptIds(imported.map(normalizePromptModel));
+  state.view = "all";
+  state.activeCollection = "all";
+  state.activeTag = "all";
+  state.query = "";
+  pendingRestore = null;
+  refs.restoreModal.hidden = true;
+  const saved = persistPrompts();
+  ensureSelection(true);
+  renderAll();
+  flashSaveState(
+    saved
+      ? buildImportSummary("Restored library with", imported.length, skipped, sanitized)
+      : "Restore loaded, but not saved locally."
+  );
 }
 
 function duplicateSelectedPrompt() {
@@ -872,6 +891,11 @@ function handleKeyboardShortcuts(event) {
   }
 
   if (event.key === "Escape") {
+    if (!refs.restoreModal.hidden) {
+      closeRestorePreview();
+      return;
+    }
+
     if (!isEditing && hasActiveFilters()) {
       clearFilters();
       showToast("Filters cleared.");
@@ -1138,6 +1162,10 @@ function hasActiveFilters() {
 
 function displayTitle(prompt) {
   return prompt.title.trim() || "Untitled Prompt";
+}
+
+function buildRestorePreview(result) {
+  return buildImportPreview(result);
 }
 
 function getPromptBody(prompt) {
