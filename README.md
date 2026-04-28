@@ -57,6 +57,18 @@ http://localhost:8000/tests/dom-smoke.html
 
 The smoke page loads `prompt-model.js`, `storage-adapter.js`, and `app.js`, then checks the core browser globals and basic UI wiring. It uses an in-page fake `localStorage`, so it does not modify the normal Prompt Shelf browser library.
 
+IndexedDB support is foundation-only and is not covered by Node because the app has no browser test dependency yet. For a manual browser check, open the app through the local server and run this in DevTools:
+
+```js
+const adapter = PromptShelfStorage.createIndexedDBAdapter({
+  dbName: "prompt-shelf-smoke-test",
+});
+await adapter.saveState([{ id: "idb-smoke", title: "IDB Smoke", body: "Test" }]);
+await adapter.loadState({ defaultPrompts: [] });
+```
+
+This checks the opt-in IndexedDB adapter without changing the default `localStorage` behavior.
+
 ## Main Workflows
 
 ### Create and Edit Prompts
@@ -111,6 +123,15 @@ Legacy aliases such as `content`, `createdAt`, and `updatedAt` are still written
 
 Browser storage is accessed through `storage-adapter.js`, which preserves the existing `prompt-shelf-state-v1` key while keeping load/save/import/export behind a small interface for future IndexedDB or sync work.
 
+The default storage path remains `localStorage`. `storage-adapter.js` also includes an opt-in IndexedDB foundation for future versions:
+
+- `createLocalStorageAdapter()`
+- `createIndexedDBAdapter()`
+- `isIndexedDBAvailable()`
+- `migrateLocalStorageToIndexedDB()`
+
+IndexedDB is not enabled by the app UI yet, and migration is never automatic. The migration helper copies normalized localStorage prompts into IndexedDB when explicitly called and preserves the original localStorage data.
+
 Backup JSON includes:
 
 - `version`
@@ -154,7 +175,7 @@ Import limits are intentionally modest: JSON files must be 2 MB or smaller and c
 - `index.html` defines the static app structure
 - `styles.css` contains the full responsive UI styling
 - `prompt-model.js` contains dependency-free prompt normalization, backup, and import helpers shared by browser and Node tests
-- `storage-adapter.js` contains the localStorage-backed load/save/import/export adapter
+- `storage-adapter.js` contains the default localStorage adapter plus the opt-in IndexedDB adapter foundation
 - `app.js` contains state management, rendering, local storage, import/export UI wiring, and keyboard shortcuts
 - `tests/run-tests.js` runs the dependency-free model and backup/restore tests with Node
 - `tests/dom-smoke.html` and `tests/dom-smoke.js` provide a dependency-free browser smoke test

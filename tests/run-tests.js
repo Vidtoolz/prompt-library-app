@@ -178,22 +178,85 @@ test("storage adapter import and export pass through model validation", () => {
   assert.equal(imported.prompts[0].body, "Backup body");
 });
 
+test("localStorage remains the default storage adapter", () => {
+  assert.equal(storage.storageType, "localStorage");
+  assert.equal(storage.getStorageKey(), "prompt-shelf-state-v1");
+  assert.equal(typeof storage.loadState, "function");
+  assert.equal(typeof storage.saveState, "function");
+});
+
+test("IndexedDB unavailable falls back safely to localStorage adapter", () => {
+  const fakeStorage = createFakeStorage();
+  const adapter = storage.createIndexedDBAdapter({
+    indexedDB: null,
+    storage: fakeStorage,
+  });
+  const saved = adapter.saveState([{ id: "fallback", title: "Fallback", body: "Body" }]);
+  const loaded = adapter.loadState({ defaultPrompts: [] });
+
+  assert.equal(adapter.storageType, "localStorage");
+  assert.equal(adapter.indexedDBAvailable, false);
+  assert.equal(saved.ok, true);
+  assert.equal(loaded.ok, true);
+  assert.equal(loaded.prompts[0].title, "Fallback");
+});
+
+test("storage adapter API shape stays stable", () => {
+  [
+    "createIndexedDBAdapter",
+    "createLocalStorageAdapter",
+    "exportState",
+    "getStorageKey",
+    "importState",
+    "isIndexedDBAvailable",
+    "loadState",
+    "migrateLocalStorageToIndexedDB",
+    "saveState",
+  ].forEach((name) => {
+    assert.equal(typeof storage[name], "function", `${name} should be a function`);
+  });
+
+  const localAdapter = storage.createLocalStorageAdapter({ storage: createFakeStorage() });
+  assert.equal(localAdapter.storageType, "localStorage");
+  assert.equal(typeof localAdapter.loadState, "function");
+  assert.equal(typeof localAdapter.saveState, "function");
+});
+
+test("migration helper does not delete localStorage data", async () => {
+  const fakeStorage = createFakeStorage();
+  const prompt = [{ id: "keep-local", title: "Keep Local", body: "Body" }];
+  storage.saveState(prompt, { storage: fakeStorage });
+
+  const result = await storage.migrateLocalStorageToIndexedDB({
+    indexedDB: null,
+    storage: fakeStorage,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.migrated, false);
+  assert.equal(result.localStoragePreserved, true);
+  assert.ok(fakeStorage.getItem(storage.getStorageKey()));
+  assert.equal(JSON.parse(fakeStorage.getItem(storage.getStorageKey()))[0].id, "keep-local");
+});
+
 let failures = 0;
 
-for (const { name, fn } of tests) {
-  try {
-    fn();
-    console.log(`ok - ${name}`);
-  } catch (error) {
-    failures += 1;
-    console.error(`not ok - ${name}`);
-    console.error(error);
+(async function runTests() {
+  for (const { name, fn } of tests) {
+    try {
+      await fn();
+      console.log(`ok - ${name}`);
+    } catch (error) {
+      failures += 1;
+      console.error(`not ok - ${name}`);
+      console.error(error);
+    }
   }
-}
 
-if (failures) {
-  console.error(`${failures} test${failures === 1 ? "" : "s"} failed.`);
-  process.exit(1);
-}
+  if (failures) {
+    console.error(`${failures} test${failures === 1 ? "" : "s"} failed.`);
+    process.exit(1);
+  }
 
-console.log(`${tests.length} tests passed.`);
+  console.log(`${tests.length} tests passed.`);
+})();
