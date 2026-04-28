@@ -31,6 +31,20 @@ http://localhost:8000
 
 You can also open `index.html` directly in a browser. If clipboard, import, or browser permissions behave differently from expected, use the local server command above.
 
+## Tests
+
+The app has a dependency-free Node test harness for the prompt model and backup/restore logic:
+
+```sh
+node tests/run-tests.js
+```
+
+Run a syntax check for the browser app script with:
+
+```sh
+node --check app.js
+```
+
 ## Main Workflows
 
 ### Create and Edit Prompts
@@ -128,7 +142,9 @@ Import limits are intentionally modest: JSON files must be 2 MB or smaller and c
 
 - `index.html` defines the static app structure
 - `styles.css` contains the full responsive UI styling
-- `app.js` contains state management, rendering, local storage, import/export, and keyboard shortcuts
+- `prompt-model.js` contains dependency-free prompt normalization, backup, and import helpers shared by browser and Node tests
+- `app.js` contains state management, rendering, local storage, import/export UI wiring, and keyboard shortcuts
+- `tests/run-tests.js` runs the dependency-free model and backup/restore tests with Node
 - `scripts/linear.mjs` provides a small Linear GraphQL helper for Hermes workflows
 
 ## Linear Helper
