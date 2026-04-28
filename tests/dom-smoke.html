@@ -66,6 +66,7 @@
         <div id="tagList"></div>
         <p id="storageStatus">Saved locally in test storage.</p>
 
+        <button id="settingsButton" type="button">Settings</button>
         <button id="importButton" type="button">Restore JSON</button>
         <button id="exportButton" type="button">Backup JSON</button>
         <input id="importFileInput" class="visually-hidden" type="file" accept="application/json,.json" />
@@ -116,6 +117,13 @@
             <div id="restorePreview"></div>
             <button id="cancelRestoreButton" type="button">Cancel</button>
             <button id="confirmRestoreButton" type="button">Confirm Restore</button>
+          </section>
+        </div>
+        <div id="settingsModal" hidden>
+          <section role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+            <h2 id="settingsModalTitle">Storage and backup status</h2>
+            <div id="settingsSummary"></div>
+            <button id="closeSettingsButton" type="button">Close</button>
           </section>
         </div>
         <div id="toast" role="status" aria-live="polite"></div>

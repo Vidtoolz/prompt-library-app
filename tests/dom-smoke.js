@@ -37,6 +37,13 @@
       },
     },
     {
+      label: "Settings control exists",
+      run: () => {
+        const button = document.getElementById("settingsButton");
+        return Boolean(button && button.textContent.includes("Settings"));
+      },
+    },
+    {
       label: "App initialized the prompt list",
       run: () => {
         const list = document.getElementById("libraryList");

@@ -132,6 +132,40 @@ test("import preview reports prompt schema folder and tag counts", () => {
   assert.equal(preview.tagCount, 3);
 });
 
+test("storage status summary reports app storage and prompt counts", () => {
+  const summary = model.buildStorageStatusSummary(
+    [
+      { id: "one", title: "One", body: "Body", folder: "Ops", tags: ["daily", "ops"] },
+      { id: "two", title: "Two", body: "Body", folder: "Research", tags: ["ops"] },
+    ],
+    {
+      appName: "Prompt Shelf",
+      appVersion: "Test version",
+      storageMode: "localStorage",
+      storageKey: "prompt-shelf-state-v1",
+    }
+  );
+
+  assert.equal(summary.appName, "Prompt Shelf");
+  assert.equal(summary.appVersion, "Test version");
+  assert.equal(summary.storageMode, "localStorage");
+  assert.equal(summary.storageKey, "prompt-shelf-state-v1");
+  assert.equal(summary.promptCount, 2);
+  assert.equal(summary.folderCount, 2);
+  assert.equal(summary.tagCount, 2);
+  assert.match(summary.backupRecommendation, /JSON backup/);
+  assert.match(summary.indexedDBNote, /foundation-only/);
+});
+
+test("storage status summary handles empty prompt list", () => {
+  const summary = model.buildStorageStatusSummary([]);
+
+  assert.equal(summary.promptCount, 0);
+  assert.equal(summary.folderCount, 0);
+  assert.equal(summary.tagCount, 0);
+  assert.equal(summary.storageMode, "localStorage");
+});
+
 test("storage adapter keeps the v1 localStorage key", () => {
   assert.equal(storage.getStorageKey(), "prompt-shelf-state-v1");
 });

@@ -1,5 +1,6 @@
 const {
   PROMPT_MODEL_VERSION,
+  buildStorageStatusSummary,
   ensureUniquePromptIds,
   buildImportPreview,
   normalizePrompt: normalizePromptModel,
@@ -179,11 +180,15 @@ function cacheElements() {
   refs.storageStatus = document.getElementById("storageStatus");
   refs.importButton = document.getElementById("importButton");
   refs.exportButton = document.getElementById("exportButton");
+  refs.settingsButton = document.getElementById("settingsButton");
   refs.importFileInput = document.getElementById("importFileInput");
   refs.restoreModal = document.getElementById("restoreModal");
   refs.restorePreview = document.getElementById("restorePreview");
   refs.cancelRestoreButton = document.getElementById("cancelRestoreButton");
   refs.confirmRestoreButton = document.getElementById("confirmRestoreButton");
+  refs.settingsModal = document.getElementById("settingsModal");
+  refs.settingsSummary = document.getElementById("settingsSummary");
+  refs.closeSettingsButton = document.getElementById("closeSettingsButton");
   refs.libraryTitle = document.getElementById("libraryTitle");
   refs.searchInput = document.getElementById("searchInput");
   refs.filterChips = document.getElementById("filterChips");
@@ -228,9 +233,11 @@ function bindEvents() {
   refs.clearFiltersButton.addEventListener("click", clearFilters);
   refs.importButton.addEventListener("click", () => refs.importFileInput.click());
   refs.exportButton.addEventListener("click", exportLibrary);
+  refs.settingsButton.addEventListener("click", openSettings);
   refs.importFileInput.addEventListener("change", importLibrary);
   refs.cancelRestoreButton.addEventListener("click", closeRestorePreview);
   refs.confirmRestoreButton.addEventListener("click", confirmRestore);
+  refs.closeSettingsButton.addEventListener("click", closeSettings);
   document.addEventListener("keydown", handleKeyboardShortcuts);
 
   refs.libraryList.addEventListener("click", (event) => {
@@ -547,6 +554,45 @@ function confirmRestore() {
     saved
       ? buildImportSummary("Restored library with", imported.length, skipped, sanitized)
       : "Restore loaded, but not saved locally."
+  );
+}
+
+function openSettings() {
+  renderSettingsSummary();
+  refs.settingsModal.hidden = false;
+  refs.closeSettingsButton.focus();
+}
+
+function closeSettings() {
+  refs.settingsModal.hidden = true;
+  refs.settingsButton.focus();
+}
+
+function renderSettingsSummary() {
+  const summary = buildStorageStatusSummary(state.prompts, {
+    appName: "Prompt Shelf",
+    appVersion: `Prompt model v${PROMPT_MODEL_VERSION}`,
+    storageMode: storageAdapter.storageType || "localStorage",
+    storageKey: storageAdapter.getStorageKey(),
+  });
+
+  refs.settingsSummary.replaceChildren();
+
+  [
+    ["App", summary.appName],
+    ["Version", summary.appVersion],
+    ["Storage mode", summary.storageMode],
+    ["Storage key", summary.storageKey],
+    ["Prompts", summary.promptCount],
+    ["Folders", summary.folderCount],
+    ["Tags", summary.tagCount],
+  ].forEach(([label, value]) => {
+    refs.settingsSummary.append(createSummaryRow(label, value));
+  });
+
+  refs.settingsSummary.append(
+    createSummaryNote("Backup recommendation", summary.backupRecommendation),
+    createSummaryNote("IndexedDB", summary.indexedDBNote)
   );
 }
 
@@ -896,6 +942,11 @@ function handleKeyboardShortcuts(event) {
       return;
     }
 
+    if (!refs.settingsModal.hidden) {
+      closeSettings();
+      return;
+    }
+
     if (!isEditing && hasActiveFilters()) {
       clearFilters();
       showToast("Filters cleared.");
@@ -1096,6 +1147,28 @@ function createStatusChip(text, variant) {
   chip.className = `status-chip ${variant}`;
   chip.textContent = text;
   return chip;
+}
+
+function createSummaryRow(label, value) {
+  const row = document.createElement("div");
+  row.className = "summary-row";
+  const labelElement = document.createElement("span");
+  const valueElement = document.createElement("strong");
+  labelElement.textContent = label;
+  valueElement.textContent = String(value);
+  row.append(labelElement, valueElement);
+  return row;
+}
+
+function createSummaryNote(label, value) {
+  const note = document.createElement("div");
+  note.className = "summary-note";
+  const labelElement = document.createElement("span");
+  const valueElement = document.createElement("p");
+  labelElement.textContent = label;
+  valueElement.textContent = value;
+  note.append(labelElement, valueElement);
+  return note;
 }
 
 function comparePrompts(left, right, sortMode) {

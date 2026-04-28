@@ -109,6 +109,35 @@
     };
   }
 
+  function buildStorageStatusSummary(prompts, options = {}) {
+    const normalizedPrompts = Array.isArray(prompts)
+      ? prompts.map(normalizePrompt)
+      : [];
+    const folders = new Set();
+    const tags = new Set();
+
+    normalizedPrompts.forEach((prompt) => {
+      folders.add(prompt.folder || "Workspace");
+      prompt.tags.forEach((tag) => tags.add(tag));
+    });
+
+    return {
+      appName: options.appName || "Prompt Shelf",
+      appVersion: options.appVersion || `Prompt model v${PROMPT_MODEL_VERSION}`,
+      storageMode: options.storageMode || "localStorage",
+      storageKey: options.storageKey || "prompt-shelf-state-v1",
+      promptCount: normalizedPrompts.length,
+      folderCount: folders.size,
+      tagCount: tags.size,
+      backupRecommendation:
+        options.backupRecommendation ||
+        "Create a JSON backup before clearing browser data, switching devices, or testing restores.",
+      indexedDBNote:
+        options.indexedDBNote ||
+        "IndexedDB support is foundation-only and is not enabled in the app UI yet.",
+    };
+  }
+
   function normalizeImportedPrompt(prompt) {
     if (!prompt || typeof prompt !== "object" || Array.isArray(prompt)) {
       return { prompt: null, sanitized: false };
@@ -353,6 +382,7 @@
     PROMPT_MODEL_VERSION,
     buildExportPayload,
     buildImportPreview,
+    buildStorageStatusSummary,
     createEmptyPromptSnapshot,
     ensureUniquePromptIds,
     normalizeImportedPrompt,
