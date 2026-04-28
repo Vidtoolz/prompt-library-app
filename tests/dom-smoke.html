@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Prompt Shelf DOM Smoke Test</title>
+    <style>
+      body {
+        background: #10141f;
+        color: #eef2ff;
+        font-family: Arial, sans-serif;
+        margin: 2rem;
+      }
+
+      .smoke-panel {
+        background: #171d2b;
+        border: 1px solid #2d3650;
+        border-radius: 8px;
+        max-width: 760px;
+        padding: 1rem;
+      }
+
+      .smoke-pass {
+        color: #63d297;
+      }
+
+      .smoke-fail {
+        color: #ff8a8a;
+      }
+
+      .app-fixture {
+        border-top: 1px solid #2d3650;
+        margin-top: 1rem;
+        padding-top: 1rem;
+      }
+
+      .visually-hidden {
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        height: 1px;
+        overflow: hidden;
+        position: absolute;
+        white-space: nowrap;
+        width: 1px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="smoke-panel">
+      <h1>Prompt Shelf DOM Smoke Test</h1>
+      <p id="smokeStatus">Waiting for app scripts...</p>
+      <ul id="smokeResults"></ul>
+
+      <section class="app-fixture" aria-label="App DOM fixture">
+        <button id="newPromptButton" type="button">New Prompt</button>
+        <div id="viewNav">
+          <button class="is-active" data-view="all" type="button">Library <span id="countAll">0</span></button>
+          <button data-view="favorites" type="button">Favorites <span id="countFavorites">0</span></button>
+          <button data-view="recent" type="button">Recent <span id="countRecent">0</span></button>
+          <button data-view="archive" type="button">Archive <span id="countArchive">0</span></button>
+        </div>
+
+        <span id="collectionCount">0 groups</span>
+        <div id="collectionList"></div>
+        <span id="tagCount">0 tags</span>
+        <div id="tagList"></div>
+        <p id="storageStatus">Saved locally in test storage.</p>
+
+        <button id="importButton" type="button">Restore JSON</button>
+        <button id="exportButton" type="button">Backup JSON</button>
+        <input id="importFileInput" class="visually-hidden" type="file" accept="application/json,.json" />
+
+        <h2 id="libraryTitle">Active prompts</h2>
+        <input id="searchInput" type="search" />
+        <div id="filterChips">
+          <button class="is-active" data-sort="updated" type="button">Updated</button>
+          <button data-sort="created" type="button">Created</button>
+          <button data-sort="alphabetical" type="button">A to Z</button>
+          <button data-sort="used" type="button">Last Used</button>
+        </div>
+        <p id="resultSummary">0 prompts</p>
+        <button id="clearFiltersButton" type="button">Clear filters</button>
+        <div id="libraryList"></div>
+
+        <h2 id="detailTitle">Select a prompt</h2>
+        <button id="favoriteToggle" type="button">Favorite</button>
+        <button id="archiveToggle" type="button">Archive</button>
+        <button id="copyPromptTop" type="button">Copy Prompt</button>
+        <button id="duplicatePromptTop" type="button">Duplicate</button>
+
+        <div>
+          <span id="summaryFolder">-</span>
+          <span id="summaryUpdated">-</span>
+          <span id="summaryUsed">-</span>
+        </div>
+
+        <form id="promptForm" autocomplete="off">
+          <input id="titleInput" name="title" type="text" />
+          <input id="folderInput" name="folder" type="text" list="folderOptions" />
+          <input id="tagsInput" name="tags" type="text" />
+          <textarea id="contentInput" name="content"></textarea>
+          <textarea id="notesInput" name="notes"></textarea>
+        </form>
+
+        <span id="previewMeta">Ready</span>
+        <pre id="promptPreview"></pre>
+        <button id="copyPromptButton" type="button">Copy Prompt</button>
+        <button id="duplicatePromptButton" type="button">Duplicate</button>
+        <button id="deletePromptButton" type="button">Delete</button>
+        <p id="saveStatus">Saved locally.</p>
+        <datalist id="folderOptions"></datalist>
+
+        <div id="restoreModal" hidden>
+          <section role="dialog" aria-modal="true" aria-labelledby="restoreModalTitle">
+            <h2 id="restoreModalTitle">Review backup before restoring</h2>
+            <div id="restorePreview"></div>
+            <button id="cancelRestoreButton" type="button">Cancel</button>
+            <button id="confirmRestoreButton" type="button">Confirm Restore</button>
+          </section>
+        </div>
+        <div id="toast" role="status" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <script>
+      (function installSmokeStorage() {
+        var store = Object.create(null);
+        var fakeStorage = {
+          getItem: function (key) {
+            return Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null;
+          },
+          setItem: function (key, value) {
+            store[key] = String(value);
+          },
+          removeItem: function (key) {
+            delete store[key];
+          },
+          clear: function () {
+            store = Object.create(null);
+          },
+        };
+
+        Object.defineProperty(window, "localStorage", {
+          configurable: true,
+          value: fakeStorage,
+        });
+        window.__promptShelfSmokeStorage = true;
+      })();
+    </script>
+    <script src="../prompt-model.js"></script>
+    <script src="../storage-adapter.js"></script>
+    <script src="../app.js"></script>
+    <script src="dom-smoke.js"></script>
+  </body>
+</html>
