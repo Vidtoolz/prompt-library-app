@@ -45,6 +45,18 @@ Run a syntax check for the browser app script with:
 node --check app.js
 ```
 
+The browser DOM smoke test is also dependency-free. Serve the repository and open the smoke page:
+
+```sh
+python3 -m http.server 8000
+```
+
+```text
+http://localhost:8000/tests/dom-smoke.html
+```
+
+The smoke page loads `prompt-model.js`, `storage-adapter.js`, and `app.js`, then checks the core browser globals and basic UI wiring. It uses an in-page fake `localStorage`, so it does not modify the normal Prompt Shelf browser library.
+
 ## Main Workflows
 
 ### Create and Edit Prompts
@@ -145,6 +157,7 @@ Import limits are intentionally modest: JSON files must be 2 MB or smaller and c
 - `storage-adapter.js` contains the localStorage-backed load/save/import/export adapter
 - `app.js` contains state management, rendering, local storage, import/export UI wiring, and keyboard shortcuts
 - `tests/run-tests.js` runs the dependency-free model and backup/restore tests with Node
+- `tests/dom-smoke.html` and `tests/dom-smoke.js` provide a dependency-free browser smoke test
 - `scripts/linear.mjs` provides a small Linear GraphQL helper for Hermes workflows
 
 ## Linear Helper
