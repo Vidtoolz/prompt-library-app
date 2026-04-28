@@ -11,6 +11,7 @@ It runs as a static site with no build step. Prompt data stays in your browser t
 - Filter by library view, collection, tag, and sort order
 - Copy prompt content and track recent usage
 - Backup and restore the library as JSON
+- View storage and backup status in Settings
 - Seeded sample prompts for first-run use
 
 ## Run Locally
@@ -93,6 +94,10 @@ Use search to find prompts by title, content, tags, notes, or collection. Sort c
 ### Reuse, Duplicate, Archive, and Delete
 
 Use **Copy Prompt** to copy the selected prompt body and update recent usage. Use **Duplicate** to create an editable copy. Use **Favorite** to pin a prompt to the Favorites view. Use **Archive** to hide a prompt from the active library, or **Delete** to permanently remove it after confirmation.
+
+### Settings and Status
+
+Use **Settings** in the sidebar to review the app name, prompt model version, storage mode, storage key, prompt count, folder count, tag count, and backup guidance. The panel is informational only. It does not enable IndexedDB migration or change the current `localStorage` behavior.
 
 ### Keyboard Shortcuts
 

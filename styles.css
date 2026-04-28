@@ -792,7 +792,15 @@ textarea {
   margin: 18px 0;
 }
 
-.restore-preview-row {
+.settings-summary {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0;
+}
+
+.restore-preview-row,
+.summary-row,
+.summary-note {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -803,12 +811,26 @@ textarea {
   background: rgba(255, 255, 255, 0.03);
 }
 
-.restore-preview-row span:first-child {
+.summary-note {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.restore-preview-row span:first-child,
+.summary-row span:first-child,
+.summary-note span:first-child {
   color: var(--text-muted);
 }
 
-.restore-preview-row strong {
+.restore-preview-row strong,
+.summary-row strong {
   color: var(--text);
+}
+
+.summary-note p {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.5;
 }
 
 .modal-warning {
