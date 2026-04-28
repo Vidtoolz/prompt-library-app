@@ -359,6 +359,13 @@ textarea:focus-visible {
   background: rgba(255, 255, 255, 0.025);
 }
 
+.backup-note {
+  margin: 0 0 14px;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
 .shortcut-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

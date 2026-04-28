@@ -1,5 +1,6 @@
 const STORAGE_KEY = "prompt-shelf-state-v1";
-const EXPORT_VERSION = 1;
+const EXPORT_VERSION = 2;
+const PROMPT_MODEL_VERSION = 2;
 const RECENT_WINDOW_DAYS = 21;
 const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
 const MAX_IMPORT_PROMPTS = 1000;
@@ -311,8 +312,9 @@ function handleFormInput() {
   prompt.folder = refs.folderInput.value.trim();
   prompt.tags = parseTags(refs.tagsInput.value);
   prompt.content = refs.contentInput.value;
+  prompt.body = refs.contentInput.value;
   prompt.notes = refs.notesInput.value;
-  prompt.updatedAt = new Date().toISOString();
+  touchPrompt(prompt);
 
   const saved = persistPrompts();
   if (saved) {
@@ -330,7 +332,8 @@ function createPrompt() {
     state.activeCollection !== "all" ? state.activeCollection : "Workspace";
   const tags = state.activeTag !== "all" ? [state.activeTag] : [];
 
-  const draft = {
+  const now = new Date().toISOString();
+  const draft = normalizePromptModel({
     id: buildId(),
     title: "Untitled Prompt",
     folder: collectionName,
@@ -338,12 +341,16 @@ function createPrompt() {
     favorite: false,
     archived: false,
     useCount: 0,
+    body: "",
     content: "",
     notes: "",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    created_at: now,
+    updated_at: now,
+    createdAt: now,
+    updatedAt: now,
     lastUsedAt: null,
-  };
+    version: PROMPT_MODEL_VERSION,
+  });
 
   state.prompts.unshift(draft);
   state.view = "all";
@@ -361,7 +368,7 @@ function toggleFavorite() {
   }
 
   prompt.favorite = !prompt.favorite;
-  prompt.updatedAt = new Date().toISOString();
+  touchPrompt(prompt);
   const saved = persistPrompts();
   renderAll();
   flashSaveState(
@@ -380,7 +387,7 @@ function toggleArchive() {
   }
 
   prompt.archived = !prompt.archived;
-  prompt.updatedAt = new Date().toISOString();
+  touchPrompt(prompt);
   if (prompt.archived) {
     prompt.favorite = false;
   }
@@ -436,12 +443,7 @@ async function copySelectedPrompt() {
 }
 
 function exportLibrary() {
-  const payload = {
-    app: "Prompt Shelf",
-    version: EXPORT_VERSION,
-    exportedAt: new Date().toISOString(),
-    prompts: state.prompts,
-  };
+  const payload = buildExportPayload();
   const blob = new Blob([JSON.stringify(payload, null, 2)], {
     type: "application/json",
   });
@@ -450,12 +452,12 @@ function exportLibrary() {
   const dateStamp = new Date().toISOString().slice(0, 10);
 
   anchor.href = url;
-  anchor.download = `prompt-shelf-export-${dateStamp}.json`;
+  anchor.download = `prompt-shelf-backup-${dateStamp}.json`;
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
-  showToast(`Exported ${state.prompts.length} prompt${state.prompts.length === 1 ? "" : "s"} to JSON.`);
+  showToast(`Backed up ${state.prompts.length} prompt${state.prompts.length === 1 ? "" : "s"} to JSON.`);
 }
 
 async function importLibrary(event) {
@@ -494,15 +496,20 @@ async function importLibrary(event) {
 
     const now = new Date().toISOString();
     if (normalizedMode === "REPLACE") {
-      state.prompts = ensureUniquePromptIds(imported);
+      state.prompts = ensureUniquePromptIds(imported.map(normalizePromptModel));
     } else {
       state.prompts = [
-        ...imported.map((prompt) => ({
+        ...imported.map((prompt) => normalizePromptModel({
           ...prompt,
           id: buildId(),
           title: `${displayTitle(prompt)} Import`,
+          body: getPromptBody(prompt),
+          content: getPromptBody(prompt),
           createdAt: now,
           updatedAt: now,
+          created_at: now,
+          updated_at: now,
+          version: PROMPT_MODEL_VERSION,
         })),
         ...state.prompts,
       ];
@@ -533,6 +540,7 @@ function duplicateSelectedPrompt() {
     return;
   }
 
+  const now = new Date().toISOString();
   const duplicate = {
     ...structuredClone(prompt),
     id: buildId(),
@@ -540,10 +548,15 @@ function duplicateSelectedPrompt() {
     favorite: false,
     archived: false,
     useCount: 0,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
+    created_at: now,
+    updated_at: now,
+    version: PROMPT_MODEL_VERSION,
     lastUsedAt: null,
   };
+  duplicate.body = getPromptBody(duplicate);
+  duplicate.content = getPromptBody(duplicate);
 
   state.prompts.unshift(duplicate);
   state.view = "all";
@@ -694,7 +707,7 @@ function renderList() {
 
     const meta = document.createElement("p");
     meta.className = "row-meta";
-    meta.textContent = `${displayFolder(prompt.folder)}  |  Updated ${formatRelative(prompt.updatedAt)}`;
+    meta.textContent = `${displayFolder(prompt.folder)}  |  Updated ${formatRelative(getUpdatedAt(prompt))}`;
 
     const headerWrap = document.createElement("div");
     headerWrap.className = "row-title-wrap";
@@ -715,7 +728,7 @@ function renderList() {
 
     const snippet = document.createElement("p");
     snippet.className = "row-snippet";
-    snippet.textContent = prompt.content.trim() || "No prompt text yet.";
+    snippet.textContent = getPromptBody(prompt).trim() || "No prompt text yet.";
 
     const footer = document.createElement("div");
     footer.className = "row-footer";
@@ -773,13 +786,13 @@ function renderDetail() {
   refs.titleInput.value = prompt.title;
   refs.folderInput.value = prompt.folder;
   refs.tagsInput.value = prompt.tags.join(", ");
-  refs.contentInput.value = prompt.content;
+  refs.contentInput.value = getPromptBody(prompt);
   refs.notesInput.value = prompt.notes;
   refs.favoriteToggle.textContent = prompt.favorite ? "Favorited" : "Favorite";
   refs.archiveToggle.textContent = prompt.archived ? "Restore" : "Archive";
   syncDetailMeta(prompt);
   syncPreview(prompt);
-  refs.saveStatus.textContent = `Saved locally · ${formatRelative(prompt.updatedAt)}`;
+  refs.saveStatus.textContent = `Saved locally · ${formatRelative(getUpdatedAt(prompt))}`;
 }
 
 function syncControls() {
@@ -796,7 +809,7 @@ function syncControls() {
 
 function syncDetailMeta(prompt) {
   refs.summaryFolder.textContent = displayFolder(prompt.folder);
-  refs.summaryUpdated.textContent = formatLongDate(prompt.updatedAt);
+  refs.summaryUpdated.textContent = formatLongDate(getUpdatedAt(prompt));
   refs.summaryUsed.textContent = prompt.lastUsedAt
     ? formatRelative(prompt.lastUsedAt)
     : "Never copied";
@@ -814,7 +827,7 @@ function syncPreview(prompt) {
     `Collection: ${displayFolder(prompt.folder)}`,
     `Tags: ${prompt.tags.length ? prompt.tags.join(", ") : "None"}`,
     "",
-    prompt.content.trim() || "No prompt text yet.",
+    getPromptBody(prompt).trim() || "No prompt text yet.",
   ];
 
   if (prompt.notes.trim()) {
@@ -1070,14 +1083,14 @@ function comparePrompts(left, right, sortMode) {
   }
 
   if (sortMode === "created") {
-    return new Date(right.createdAt) - new Date(left.createdAt);
+    return new Date(getCreatedAt(right)) - new Date(getCreatedAt(left));
   }
 
   if (sortMode === "used") {
     return new Date(right.lastUsedAt || 0) - new Date(left.lastUsedAt || 0);
   }
 
-  return new Date(right.updatedAt) - new Date(left.updatedAt);
+  return new Date(getUpdatedAt(right)) - new Date(getUpdatedAt(left));
 }
 
 function buildLibraryTitle(count) {
@@ -1130,15 +1143,34 @@ function displayTitle(prompt) {
   return prompt.title.trim() || "Untitled Prompt";
 }
 
+function getPromptBody(prompt) {
+  return typeof prompt.body === "string" ? prompt.body : prompt.content || "";
+}
+
+function getUpdatedAt(prompt) {
+  return prompt.updated_at || prompt.updatedAt;
+}
+
+function getCreatedAt(prompt) {
+  return prompt.created_at || prompt.createdAt;
+}
+
+function touchPrompt(prompt) {
+  const now = new Date().toISOString();
+  prompt.updated_at = now;
+  prompt.updatedAt = now;
+  prompt.version = PROMPT_MODEL_VERSION;
+}
+
 function displayFolder(folder) {
-  return folder.trim() || "Workspace";
+  return typeof folder === "string" && folder.trim() ? folder.trim() : "Workspace";
 }
 
 function buildSearchBlob(prompt) {
   return [
     prompt.title,
     prompt.folder,
-    prompt.content,
+    getPromptBody(prompt),
     prompt.notes,
     prompt.tags.join(" "),
   ]
@@ -1208,6 +1240,10 @@ function normalizePrompt(prompt) {
   return normalizeImportedPrompt(prompt).prompt || createEmptyPromptSnapshot();
 }
 
+function normalizePromptModel(prompt) {
+  return normalizeImportedPrompt(prompt).prompt || createEmptyPromptSnapshot();
+}
+
 function normalizeImportedPrompt(prompt) {
   if (!prompt || typeof prompt !== "object" || Array.isArray(prompt)) {
     return { prompt: null, sanitized: false };
@@ -1216,30 +1252,42 @@ function normalizeImportedPrompt(prompt) {
   const now = new Date().toISOString();
   const title = normalizeTextField(prompt.title, MAX_TITLE_LENGTH);
   const folder = normalizeTextField(prompt.folder, MAX_FOLDER_LENGTH) || "Workspace";
-  const content = normalizeTextField(prompt.content, MAX_TEXT_LENGTH);
+  const body = normalizeTextField(prompt.body ?? prompt.content, MAX_TEXT_LENGTH);
   const notes = normalizeTextField(prompt.notes, MAX_TEXT_LENGTH);
   const tags = normalizeTags(prompt.tags);
   const useCount = normalizeUseCount(prompt.useCount);
-  const createdAt = isValidDate(prompt.createdAt) ? prompt.createdAt : now;
-  const updatedAt = isValidDate(prompt.updatedAt) ? prompt.updatedAt : now;
+  const createdAt = isValidDate(prompt.created_at)
+    ? prompt.created_at
+    : isValidDate(prompt.createdAt)
+      ? prompt.createdAt
+      : now;
+  const updatedAt = isValidDate(prompt.updated_at)
+    ? prompt.updated_at
+    : isValidDate(prompt.updatedAt)
+      ? prompt.updatedAt
+      : now;
   const lastUsedAt = isValidDate(prompt.lastUsedAt) ? prompt.lastUsedAt : null;
 
   const normalized = {
     id: normalizeId(prompt.id),
     title,
+    body,
     folder,
     tags,
     favorite: prompt.favorite === true,
     archived: prompt.archived === true,
+    version: normalizeVersion(prompt.version),
     useCount,
-    content,
+    content: body,
     notes,
+    created_at: createdAt,
+    updated_at: updatedAt,
     createdAt,
     updatedAt,
     lastUsedAt,
   };
 
-  if (!normalized.title && !normalized.content && !normalized.notes) {
+  if (!normalized.title && !normalized.body && !normalized.notes) {
     return { prompt: null, sanitized: false };
   }
 
@@ -1254,13 +1302,17 @@ function createEmptyPromptSnapshot() {
   return {
     id: buildId(),
     title: "",
+    body: "",
     folder: "Workspace",
     tags: [],
     favorite: false,
     archived: false,
+    version: PROMPT_MODEL_VERSION,
     useCount: 0,
     content: "",
     notes: "",
+    created_at: now,
+    updated_at: now,
     createdAt: now,
     updatedAt: now,
     lastUsedAt: null,
@@ -1269,6 +1321,15 @@ function createEmptyPromptSnapshot() {
 
 function normalizeId(value) {
   return typeof value === "string" && value.trim() ? value.trim() : buildId();
+}
+
+function normalizeVersion(value) {
+  const version = Number(value);
+  if (!Number.isFinite(version) || version < 1) {
+    return PROMPT_MODEL_VERSION;
+  }
+
+  return Math.max(PROMPT_MODEL_VERSION, Math.floor(version));
 }
 
 function normalizeTextField(value, maxLength) {
@@ -1328,13 +1389,13 @@ function didSanitizePrompt(original, normalized) {
     originalId !== normalized.id ||
     normalizeTextField(original.title, MAX_TITLE_LENGTH) !== normalized.title ||
     originalFolder !== normalized.folder ||
-    normalizeTextField(original.content, MAX_TEXT_LENGTH) !== normalized.content ||
+    normalizeTextField(original.body ?? original.content, MAX_TEXT_LENGTH) !== normalized.body ||
     normalizeTextField(original.notes, MAX_TEXT_LENGTH) !== normalized.notes ||
     normalizeUseCount(original.useCount) !== normalized.useCount ||
     original.favorite !== normalized.favorite ||
     original.archived !== normalized.archived ||
-    !isValidDate(original.createdAt) ||
-    !isValidDate(original.updatedAt) ||
+    !isValidDate(original.created_at ?? original.createdAt) ||
+    !isValidDate(original.updated_at ?? original.updatedAt) ||
     (original.lastUsedAt !== null && original.lastUsedAt !== undefined && !isValidDate(original.lastUsedAt)) ||
     originalTags.join("\u0000") !== normalized.tags.join("\u0000")
   );
@@ -1352,6 +1413,45 @@ function buildImportSummary(action, importedCount, skippedCount, sanitizedCount)
   }
 
   return parts.join(" ");
+}
+
+function buildExportPayload() {
+  const prompts = state.prompts.map(serializePrompt);
+  return {
+    app: "Prompt Shelf",
+    format: "prompt-shelf-backup",
+    version: EXPORT_VERSION,
+    schemaVersion: PROMPT_MODEL_VERSION,
+    exportedAt: new Date().toISOString(),
+    counts: {
+      prompts: prompts.length,
+      archived: prompts.filter((prompt) => prompt.archived).length,
+      favorites: prompts.filter((prompt) => prompt.favorite).length,
+    },
+    prompts,
+  };
+}
+
+function serializePrompt(prompt) {
+  const normalized = normalizePromptModel(prompt);
+  return {
+    id: normalized.id,
+    title: normalized.title,
+    body: normalized.body,
+    tags: normalized.tags,
+    folder: normalized.folder,
+    favorite: normalized.favorite,
+    created_at: normalized.created_at,
+    updated_at: normalized.updated_at,
+    version: normalized.version,
+    archived: normalized.archived,
+    content: normalized.body,
+    notes: normalized.notes,
+    useCount: normalized.useCount,
+    createdAt: normalized.createdAt,
+    updatedAt: normalized.updatedAt,
+    lastUsedAt: normalized.lastUsedAt,
+  };
 }
 
 function countDuplicateIds(prompts) {
@@ -1394,10 +1494,7 @@ function ensureUniquePromptIds(prompts) {
 }
 
 function parseTags(value) {
-  return value
-    .split(",")
-    .map((tag) => tag.trim())
-    .filter(Boolean);
+  return normalizeTags(value);
 }
 
 function isRecent(dateString) {
@@ -1454,7 +1551,7 @@ function isValidDate(value) {
 }
 
 function buildCopyPayload(prompt) {
-  const lines = [prompt.content.trim()];
+  const lines = [getPromptBody(prompt).trim()];
 
   if (prompt.notes.trim()) {
     lines.push("", `Notes: ${prompt.notes.trim()}`);
@@ -1494,7 +1591,7 @@ function loadPrompts() {
   }
 
   if (!saved) {
-    const seededPrompts = structuredClone(seedPrompts);
+    const seededPrompts = structuredClone(seedPrompts).map(normalizePromptModel);
     persistPromptSnapshot(seededPrompts);
     return seededPrompts;
   }

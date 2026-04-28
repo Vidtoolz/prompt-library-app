@@ -10,7 +10,7 @@ It runs as a static site with no build step. Prompt data stays in your browser t
 - Search prompts by title, content, tags, notes, or collection
 - Filter by library view, collection, tag, and sort order
 - Copy prompt content and track recent usage
-- Import and export the library as JSON
+- Backup and restore the library as JSON
 - Seeded sample prompts for first-run use
 
 ## Run Locally
@@ -68,28 +68,45 @@ Use **Copy Prompt** to copy the selected prompt body and update recent usage. Us
 
 Prompt data is saved under the browser storage key `prompt-shelf-state-v1`.
 
-Exported JSON includes:
+The app now normalizes prompts to a v2-ready local model while preserving the existing v1 localStorage behavior. Each prompt keeps the current app fields and also carries the durable model fields:
+
+- `id`
+- `title`
+- `body`
+- `tags`
+- `folder`
+- `favorite`
+- `created_at`
+- `updated_at`
+- `version`
+- `archived`
+
+Legacy aliases such as `content`, `createdAt`, and `updatedAt` are still written for compatibility with older exports and existing browser data.
+
+Backup JSON includes:
 
 - `version`
+- `schemaVersion`
 - `exportedAt`
+- `counts`
 - `prompts`
 
-Imports validate the selected JSON file, then prompt for one of two modes:
+Restore/import validates the selected JSON file, then prompts for one of two modes:
 
 - `IMPORT` adds the imported prompts as copies
 - `REPLACE` overwrites the current local library
 
-Import expects either an exported Prompt Shelf JSON object with a `prompts` array or a raw array of prompt objects. Invalid files, empty prompt sets, and unsupported shapes are rejected without changing local data.
+Import expects either an exported Prompt Shelf JSON object with a `prompts` array or a raw array of prompt objects. Invalid files, empty prompt sets, and unsupported shapes are rejected without changing local data. Imports accept both v2 `body` and legacy `content` prompt text.
 
 Because storage is browser-local, each browser profile or device has its own separate library.
 
 Import limits are intentionally modest: JSON files must be 2 MB or smaller and contain no more than 1,000 prompts. During import, Prompt Shelf repairs duplicate IDs, normalizes dates, trims long text fields, cleans tags, and skips entries that do not contain a title, prompt body, or notes.
 
-## Backup Guidance
+## Backup / Restore Guidance
 
-- Export before clearing browser data, switching devices, or testing imports.
+- Use **Backup JSON** before clearing browser data, switching devices, or testing imports.
 - Keep exported JSON somewhere outside the browser profile, such as a project folder or cloud drive.
-- Test backups by importing into another browser profile with `IMPORT` first.
+- Test backups by restoring into another browser profile with `IMPORT` first.
 - Use `REPLACE` only when you intentionally want the selected JSON file to become the full local library.
 
 ## Limitations
